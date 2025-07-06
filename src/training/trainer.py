@@ -60,6 +60,11 @@ class AMEODETrainer:
         # Initialize model
         self.model = AMEODE(config.to_dict()).to(self.device)
         
+        # Apply improved initialization if requested
+        if config.model.get('use_improved_init', True):
+            from src.models.initialization import initialize_ame_ode
+            initialize_ame_ode(self.model, config.model)
+        
         # Initialize loss function
         if config.training.get('use_stability_loss', False):
             self.loss_fn = StabilityAwareLoss(config.to_dict())
@@ -101,7 +106,8 @@ class AMEODETrainer:
         if opt_name == 'adam':
             return optim.Adam(self.model.parameters(), lr=lr, weight_decay=0)
         elif opt_name == 'adamw':
-            return optim.AdamW(self.model.parameters(), lr=lr, weight_decay=1e-5)
+            weight_decay = float(self.config.training.get('weight_decay', 1e-5))
+            return optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
         elif opt_name == 'sgd':
             return optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
         else:
@@ -116,6 +122,13 @@ class AMEODETrainer:
             return optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer,
                 T_max=self.config.training['num_epochs'],
+                eta_min=float(scheduler_config.get('min_lr', 1e-6)),
+            )
+        elif scheduler_type == 'cosine_with_restarts':
+            return optim.lr_scheduler.CosineAnnealingWarmRestarts(
+                self.optimizer,
+                T_0=int(scheduler_config.get('T_0', 50)),
+                T_mult=int(scheduler_config.get('T_mult', 2)),
                 eta_min=float(scheduler_config.get('min_lr', 1e-6)),
             )
         elif scheduler_type == 'step':

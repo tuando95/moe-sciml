@@ -1,0 +1,109 @@
+# Improved AME-ODE configuration for better performance
+
+# Model Architecture - more experts and capacity
+model:
+  state_dim: 4  # Will be overridden dynamically based on the data
+  n_experts: 4  # More experts for better specialization
+  expert_architecture:
+    depth: 4      # Deeper networks
+    width: 128    # Wider networks
+    activation: "swish"  # Smoother activation
+    residual: true
+    dropout: 0.1  # Small dropout for regularization
+  gating_architecture:
+    depth: 3      # Deeper gating for better routing
+    width: 32     # Wider gating
+    activation: "swish"
+    temperature: 0.5  # Lower temperature for sharper routing
+  history_embedding:
+    type: "lstm"
+    hidden_dim: 32  # Larger history embedding
+    num_layers: 2   # Deeper LSTM
+  expert_threshold: 0.001  # Lower threshold to use more experts
+
+# Training Configuration - longer training with better schedule
+training:
+  batch_size: 32  # Larger batch for more stable gradients
+  learning_rate: 5e-4  # Lower initial learning rate
+  num_epochs: 200  # More epochs
+  early_stopping_patience: 50  # Much more patience
+  gradient_clip_norm: 1.0
+  sequence_length: 50
+  optimizer: "adamw"  # AdamW for better weight decay
+  weight_decay: 1e-5
+  scheduler:
+    type: "cosine_with_restarts"
+    warmup_epochs: 10  # Longer warmup
+    min_lr: 1e-6
+    T_0: 50  # Restart every 50 epochs
+    T_mult: 2  # Double period after each restart
+  regularization:
+    route_weight: 0.0001     # Much lower - focus on reconstruction
+    expert_weight: 1e-6      # Very light L2 regularization
+    diversity_weight: 0.0001 # Very low - let experts specialize naturally
+    smoothness_weight: 0.0001 # Very low - allow rapid switching if needed
+    balance_weight: 0.001    # Low - natural balance will emerge
+
+# Integration Configuration - higher precision
+integration:
+  method: "dopri5"  # Adaptive high-order method
+  rtol: 1e-4
+  atol: 1e-5
+  max_step_size: 0.1
+  min_step_size: 1e-5
+  adaptive_step: true  # Enable adaptive stepping
+  routing_aware_step: true
+  adjoint: false  # Regular backprop for now
+
+# Data Configuration - larger dataset
+data:
+  synthetic_systems:
+    - name: "multi_scale_oscillators"
+      enabled: true
+      n_trajectories: 2000  # More data
+      trajectory_length: 100  # Longer trajectories
+      sampling_dt: 0.01  # Finer sampling
+      params:
+        freq_fast: 10.0
+        freq_slow: 0.1
+        coupling_strength: [0.05, 0.05]
+  noise:
+    observation_noise: 0.005  # Less noise
+    process_noise: 0.0
+  train_val_test_split: [0.7, 0.15, 0.15]
+  temporal_sampling: "uniform"
+  augmentation:
+    random_rotation: true  # Enable augmentation
+    random_scaling: true
+    rotation_range: [-0.1, 0.1]  # Small rotations
+    scale_range: [0.9, 1.1]  # Small scaling
+
+# Computational Resources
+compute:
+  device: "cuda"
+  mixed_precision: true  # Enable for faster training
+  gradient_checkpointing: false
+  multi_gpu: false
+  num_workers: 4
+
+# Logging
+logging:
+  log_dir: "./logs_improved"
+  checkpoint_dir: "./checkpoints_improved"
+  tensorboard: true
+  wandb:
+    enabled: false
+  save_frequency: 10
+  log_frequency: 20
+
+# Evaluation
+evaluation:
+  metrics:
+    - "trajectory_mse"
+    - "computational_efficiency"
+    - "expert_specialization"
+    - "long_term_accuracy"
+  visualization:
+    phase_portraits: true
+    routing_heatmaps: true
+    trajectory_decomposition: true
