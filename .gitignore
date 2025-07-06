@@ -158,7 +158,7 @@ tensorboard/
 .tensorboard/
 Claude.md
 logs_test/
-!src/data/
+
 # Data
 data/
 synthetic_data/
@@ -167,7 +167,7 @@ cached_data/
 *.npy
 *.h5
 *.hdf5
-
+!src/data/
 # Temporary files
 *.tmp
 *.temp
