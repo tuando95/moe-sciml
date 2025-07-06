@@ -27,15 +27,26 @@ from tqdm import tqdm
 class BaselineTrainer:
     """Trainer for baseline models."""
     
-    def __init__(self, model, config, device='cuda'):
+    def __init__(self, model, config, device='cuda', baseline='single'):
         self.model = model.to(device)
         self.config = config
         self.device = device
+        self.baseline = baseline
         
         # Optimizer
         self.optimizer = torch.optim.Adam(
             self.model.parameters(),
             lr=float(config.training['learning_rate'])
+        )
+        
+        # Learning rate scheduler - reduce on plateau for stability
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode='min',
+            factor=0.5,
+            patience=5,
+            min_lr=1e-6,
+            verbose=True
         )
         
         # Loss
@@ -82,10 +93,15 @@ class BaselineTrainer:
             self.optimizer.zero_grad()
             loss.backward()
             
-            # Gradient clipping
+            # Gradient clipping - use stricter clipping for augmented models
+            if self.baseline == 'augmented':
+                clip_norm = min(0.5, self.config.training['gradient_clip_norm'])
+            else:
+                clip_norm = self.config.training['gradient_clip_norm']
+            
             torch.nn.utils.clip_grad_norm_(
                 self.model.parameters(),
-                self.config.training['gradient_clip_norm']
+                clip_norm
             )
             
             self.optimizer.step()
@@ -192,9 +208,13 @@ class BaselineTrainer:
             val_loss = self.validate(val_loader)
             self.metrics_history['val_loss'].append(val_loss)
             
+            # Step the learning rate scheduler
+            self.scheduler.step(val_loss)
+            
             # Print progress
             print(f"Epoch {epoch+1}/{num_epochs} - "
-                  f"Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+                  f"Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, "
+                  f"LR: {self.optimizer.param_groups[0]['lr']:.2e}")
             
             # Save best model
             if val_loss < self.best_val_loss:
@@ -268,7 +288,7 @@ def main():
     print(f"Total parameters: {total_params:,}")
     
     # Create trainer and train
-    trainer = BaselineTrainer(model, config, device=args.device)
+    trainer = BaselineTrainer(model, config, device=args.device, baseline=args.baseline)
     metrics = trainer.train(train_loader, val_loader, config.training['num_epochs'])
     
     # Save final results

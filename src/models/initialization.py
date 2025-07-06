@@ -107,13 +107,15 @@ def initialize_gating_network(
         # Initialize to give roughly uniform routing initially
         for name, param in gating.named_parameters():
             if 'weight' in name:
-                if 'output' in name or name.endswith('2.weight'):  # Output layer
+                # Check if this is the final layer (outputs n_experts logits)
+                if param.shape[0] == n_experts:  # Output layer
                     # Small random init for logits
                     nn.init.normal_(param, mean=0.0, std=0.01 / temperature)
                 else:
                     nn.init.xavier_uniform_(param)
             elif 'bias' in name:
-                if 'output' in name or name.endswith('2.bias'):  # Output layer
+                # Check if this is the final layer bias
+                if param.shape[0] == n_experts:  # Output layer
                     # Initialize biases to make routing roughly uniform
                     nn.init.constant_(param, 0.0)
                 else:
@@ -123,7 +125,7 @@ def initialize_gating_network(
         # Initialize for sparse routing (one-hot like)
         for name, param in gating.named_parameters():
             if 'weight' in name:
-                if 'output' in name or name.endswith('2.weight'):  # Output layer
+                if param.shape[0] == n_experts:  # Output layer
                     # Larger variance for more decisive routing
                     nn.init.normal_(param, mean=0.0, std=1.0 / temperature)
                 else:
@@ -162,10 +164,9 @@ def initialize_ame_ode(model, config: dict):
     temperature = config.get('temperature', 1.0)
     
     if hasattr(model.gating, 'gating_network'):
-        for gating_net in model.gating.gating_network.gating_networks:
-            initialize_gating_network(
-                gating_net, n_experts, temperature, gating_init_strategy
-            )
+        initialize_gating_network(
+            model.gating.gating_network, n_experts, temperature, gating_init_strategy
+        )
     
     # Initialize LSTM in history encoder
     if hasattr(model.gating, 'history_encoder') and hasattr(model.gating.history_encoder, 'lstm'):

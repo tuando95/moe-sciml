@@ -248,6 +248,13 @@ class AugmentedNeuralODE(nn.Module):
             nn.Linear(hidden_dim, self.total_dim)
         )
         
+        # Initialize with small weights to prevent instability
+        for layer in self.net:
+            if isinstance(layer, nn.Linear):
+                nn.init.xavier_normal_(layer.weight, gain=0.1)
+                if layer.bias is not None:
+                    nn.init.zeros_(layer.bias)
+        
         # Integration settings
         self.rtol = config['integration']['rtol']
         self.atol = config['integration']['atol']
@@ -255,14 +262,26 @@ class AugmentedNeuralODE(nn.Module):
         self.adjoint = config['integration'].get('adjoint', True)
     
     def forward(self, t: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
-        """Augmented ODE function."""
+        """Augmented ODE function with stability control."""
         if t.dim() == 0:
             t = t.unsqueeze(0).expand(z.shape[0])
         if t.dim() == 1:
             t = t.unsqueeze(-1)
         
         inputs = torch.cat([z, t], dim=-1)
-        return self.net(inputs)
+        dz_dt = self.net(inputs)
+        
+        # Add stability control: bound the dynamics
+        # This prevents explosive growth that causes NaN
+        max_norm = 10.0  # Maximum allowed norm for dynamics
+        dz_dt_norm = torch.norm(dz_dt, dim=-1, keepdim=True)
+        scaling_factor = torch.minimum(
+            torch.ones_like(dz_dt_norm),
+            max_norm / (dz_dt_norm + 1e-6)
+        )
+        dz_dt = dz_dt * scaling_factor
+        
+        return dz_dt
     
     def integrate(
         self,
