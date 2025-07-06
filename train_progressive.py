@@ -61,14 +61,23 @@ class ProgressiveAMEODETrainer(AMEODETrainer):
             # Full regularization
             progress = 1.0
         
-        # Update weights
+        # Update weights in the loss function
         for key in self.initial_reg_weights:
             current_weight = (
                 self.initial_reg_weights[key] * (1 - progress) +
                 self.target_reg_weights[key] * progress
             )
-            full_key = f"{key}_weight"
-            self.loss_weights[full_key] = current_weight
+            # Update the loss function's weights directly
+            if key == 'route':
+                self.loss_fn.lambda_route = current_weight
+            elif key == 'expert':
+                self.loss_fn.lambda_expert = current_weight
+            elif key == 'diversity':
+                self.loss_fn.lambda_div = current_weight
+            elif key == 'smoothness':
+                self.loss_fn.lambda_smooth = current_weight
+            elif key == 'balance':
+                self.loss_fn.lambda_balance = current_weight
     
     def train_epoch(self, dataloader):
         """Train for one epoch with progressive regularization."""
@@ -81,9 +90,11 @@ class ProgressiveAMEODETrainer(AMEODETrainer):
         # Log current regularization weights every 10 epochs
         if self.current_epoch % 10 == 0:
             print(f"\nRegularization weights at epoch {self.current_epoch}:")
-            for key, weight in self.loss_weights.items():
-                if key != 'reconstruction':
-                    print(f"  {key}: {weight:.2e}")
+            print(f"  route_weight: {self.loss_fn.lambda_route:.2e}")
+            print(f"  expert_weight: {self.loss_fn.lambda_expert:.2e}")
+            print(f"  diversity_weight: {self.loss_fn.lambda_div:.2e}")
+            print(f"  smoothness_weight: {self.loss_fn.lambda_smooth:.2e}")
+            print(f"  balance_weight: {self.loss_fn.lambda_balance:.2e}")
         
         return metrics
 
