@@ -70,17 +70,17 @@ class ProgressiveAMEODETrainer(AMEODETrainer):
             full_key = f"{key}_weight"
             self.loss_weights[full_key] = current_weight
     
-    def train_epoch(self, dataloader, epoch):
+    def train_epoch(self, dataloader):
         """Train for one epoch with progressive regularization."""
-        # Update regularization weights
-        self.update_regularization_weights(epoch)
+        # Update regularization weights based on current epoch
+        self.update_regularization_weights(self.current_epoch)
         
         # Call parent train_epoch
         metrics = super().train_epoch(dataloader)
         
         # Log current regularization weights every 10 epochs
-        if epoch % 10 == 0:
-            print(f"\nRegularization weights at epoch {epoch}:")
+        if self.current_epoch % 10 == 0:
+            print(f"\nRegularization weights at epoch {self.current_epoch}:")
             for key, weight in self.loss_weights.items():
                 if key != 'reconstruction':
                     print(f"  {key}: {weight:.2e}")
