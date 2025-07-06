@@ -27,12 +27,12 @@ class ProgressiveAMEODETrainer(AMEODETrainer):
     def __init__(self, config, device='cuda'):
         super().__init__(config, device)
         
-        # Store initial regularization weights
+        # Store initial regularization weights - ensure they are floats
         self.initial_reg_weights = {
             'route': 0.0,
-            'expert': config.training['regularization']['expert_weight'],
+            'expert': float(config.training['regularization']['expert_weight']),
             'diversity': 0.0,
-            'smoothness': config.training['regularization']['smoothness_weight'],
+            'smoothness': float(config.training['regularization']['smoothness_weight']),
             'balance': 0.0
         }
         
