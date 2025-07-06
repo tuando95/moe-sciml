@@ -18,8 +18,12 @@ model:
     type: "lstm"
     hidden_dim: 16
     num_layers: 1
-  temperature: 1.0
+  temperature: 0.5  # Lower for sharper routing
   expert_threshold: 0.01
+  # Initialization settings
+  use_improved_init: true
+  expert_init_strategy: "spectral"
+  gating_init_strategy: "sparse"
 
 # Training Configuration - minimal epochs
 training:
@@ -35,11 +39,11 @@ training:
     warmup_epochs: 2
     min_lr: 1e-5
   regularization:
-    route_weight: 0.0001     # Much lower - focus on reconstruction
+    route_weight: 0.0        # No routing penalty initially
     expert_weight: 1e-6      # Very light L2 regularization
-    diversity_weight: 0.0001 # Very low - let experts specialize naturally
-    smoothness_weight: 0.0001 # Very low - allow rapid switching if needed
-    balance_weight: 0.001    # Low - natural balance will emerge
+    diversity_weight: 0.0    # No diversity penalty - let experts specialize
+    smoothness_weight: 1e-5  # Very light smoothness only
+    balance_weight: 0.0      # No balance penalty - natural specialization
 
 # Integration Configuration - fast settings
 integration:
