@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')  # Set backend before importing pyplot
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -88,7 +90,7 @@ class AMEODEVisualizer:
         
         if save_name and self.save_dir:
             plt.savefig(self.save_dir / f"{save_name}.png", dpi=150, bbox_inches='tight')
-        plt.show()
+        plt.close()  # Close figure instead of showing
     
     def plot_routing_heatmap(
         self,
@@ -163,7 +165,7 @@ class AMEODEVisualizer:
         
         if save_name and self.save_dir:
             plt.savefig(self.save_dir / f"{save_name}.png", dpi=150, bbox_inches='tight')
-        plt.show()
+        plt.close()  # Close figure instead of showing
     
     def plot_trajectory_comparison(
         self,
@@ -206,7 +208,7 @@ class AMEODEVisualizer:
         
         if save_name and self.save_dir:
             plt.savefig(self.save_dir / f"{save_name}_timeseries.png", dpi=150, bbox_inches='tight')
-        plt.show()
+        plt.close()  # Close figure instead of showing
         
         # Phase space plots for 2D/3D
         if true_traj.shape[-1] >= 2:
@@ -241,7 +243,7 @@ class AMEODEVisualizer:
             
             if save_name and self.save_dir:
                 plt.savefig(self.save_dir / f"{save_name}_phasespace.png", dpi=150, bbox_inches='tight')
-            plt.show()
+            plt.close()  # Close figure instead of showing
     
     def plot_expert_usage_evolution(
         self,
@@ -304,7 +306,7 @@ class AMEODEVisualizer:
         
         if save_name and self.save_dir:
             plt.savefig(self.save_dir / f"{save_name}.png", dpi=150, bbox_inches='tight')
-        plt.show()
+        plt.close()  # Close figure instead of showing
     
     def plot_loss_landscape(
         self,
@@ -358,7 +360,7 @@ class AMEODEVisualizer:
         
         if save_name and self.save_dir:
             plt.savefig(self.save_dir / f"{save_name}.png", dpi=150, bbox_inches='tight')
-        plt.show()
+        plt.close()  # Close figure instead of showing
     
     def create_interactive_3d_trajectory(
         self,
@@ -458,7 +460,7 @@ class AMEODEVisualizer:
         
         if save_name and self.save_dir:
             plt.savefig(self.save_dir / f"{save_name}.png", dpi=150, bbox_inches='tight')
-        plt.show()
+        plt.close()  # Close figure instead of showing
 
 
 def create_training_animation(
