@@ -1,0 +1,76 @@
+# Configuration for Lorenz system experiments
+
+# Inherit from base config
+base_config: config.yml
+
+# Model Architecture - optimized for chaotic dynamics
+model:
+  n_experts: 6  # More experts for complex dynamics
+  expert_architecture:
+    depth: 5
+    width: 256
+    activation: "tanh"  # Better for smooth dynamics
+    residual: true
+    dropout: 0.1
+  gating_architecture:
+    depth: 4
+    width: 128
+    activation: "relu"
+  history_embedding:
+    type: "lstm"
+    hidden_dim: 64
+    num_layers: 2
+  temperature: 0.5  # Sharper routing for distinct regimes
+  expert_threshold: 0.05
+
+# Training Configuration - longer training for complex dynamics
+training:
+  batch_size: 64
+  learning_rate: 5e-4
+  num_epochs: 300
+  early_stopping_patience: 30
+  gradient_clip_norm: 0.5  # More aggressive clipping for stability
+  sequence_length: 150
+  optimizer: "adamw"
+  scheduler:
+    type: "cosine"
+    warmup_epochs: 30
+    min_lr: 1e-6
+  regularization:
+    route_weight: 0.05  # Less routing regularization
+    expert_weight: 5e-5
+    diversity_weight: 2.0  # Higher diversity for distinct regimes
+    smoothness_weight: 0.05
+    balance_weight: 0.2
+
+# Integration Configuration - tighter tolerances for chaos
+integration:
+  method: "dopri5"
+  rtol: 1e-6
+  atol: 1e-8
+  max_step_size: 0.05
+  min_step_size: 1e-7
+  adaptive_step: true
+  routing_aware_step: true
+
+# Data Configuration
+data:
+  synthetic_systems:
+    - name: "piecewise_lorenz"
+      enabled: true
+      n_trajectories: 8000
+      trajectory_length: 100
+      sampling_dt: 0.005
+      params:
+        sigma: [9, 11]
+        rho: [26, 30]
+        beta: [2.3, 2.8]
+        switching_radius: [8, 12]
+  noise:
+    observation_noise: 0.005
+    process_noise: 0.0005
+  temporal_sampling: "adaptive"  # Focus on fast-changing regions
+  augmentation:
+    random_rotation: true
+    random_scaling: false  # Preserve chaos characteristics
+    noise_injection: false

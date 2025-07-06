@@ -1,0 +1,153 @@
+# AME-ODE Configuration File
+
+# Model Architecture
+model:
+  n_experts: 4
+  expert_architecture:
+    depth: 4
+    width: 128
+    activation: "relu"
+    residual: true
+    dropout: 0.0
+  gating_architecture:
+    depth: 3
+    width: 64
+    activation: "relu"
+  history_embedding:
+    type: "lstm"
+    hidden_dim: 32
+    num_layers: 1
+  temperature: 1.0
+  expert_threshold: 0.01
+
+# Training Configuration
+training:
+  batch_size: 32
+  learning_rate: 1e-3
+  num_epochs: 200
+  early_stopping_patience: 20
+  gradient_clip_norm: 1.0
+  optimizer: "adam"
+  scheduler:
+    type: "cosine"
+    warmup_epochs: 20
+    min_lr: 1e-6
+  regularization:
+    route_weight: 0.001
+    expert_weight: 1e-5
+    diversity_weight: 0.1    # Safe with bounded loss formulation
+    smoothness_weight: 0.001
+    balance_weight: 0.001
+
+# Integration Configuration
+integration:
+  method: "dopri5"  # torchdiffeq adaptive RK45
+  rtol: 1e-5
+  atol: 1e-6
+  max_step_size: 0.1
+  min_step_size: 1e-6
+  adaptive_step: true
+  routing_aware_step: true
+
+# Data Configuration
+data:
+  synthetic_systems:
+    - name: "multi_scale_oscillators"
+      enabled: true
+      n_trajectories: 10000
+      trajectory_length: 100
+      sampling_dt: 0.01
+      params:
+        freq_fast: 10.0
+        freq_slow: 0.1
+        coupling_strength: [0.01, 0.1]
+    - name: "piecewise_lorenz"
+      enabled: true
+      n_trajectories: 5000
+      trajectory_length: 50
+      sampling_dt: 0.005
+      params:
+        sigma: [8, 12]
+        rho: [24, 32]
+        beta: [2, 3]
+        switching_radius: [5, 15]
+    - name: "van_der_pol_network"
+      enabled: true
+      n_trajectories: 8000
+      trajectory_length: 200
+      sampling_dt: 0.02
+      params:
+        n_oscillators: [4, 8]
+        mu_range: [0.1, 3.0]
+    - name: "kuramoto_model"
+      enabled: true
+      n_trajectories: 12000
+      trajectory_length: 150
+      sampling_dt: 0.01
+      params:
+        n_oscillators: [10, 50]
+        coupling_strength: [0.5, 5.0]
+  noise:
+    observation_noise: 0.01
+    process_noise: 0.001
+  train_val_test_split: [0.7, 0.15, 0.15]
+  augmentation:
+    random_rotation: true
+    random_scaling: true
+
+# Evaluation Configuration
+evaluation:
+  metrics:
+    - "trajectory_mse"
+    - "computational_efficiency"
+    - "expert_specialization"
+    - "long_term_stability"
+    - "phase_space_geometry"
+    - "energy_conservation"
+    - "routing_stability"
+  visualization:
+    phase_portraits: true
+    routing_heatmaps: true
+    trajectory_decomposition: true
+    loss_landscape: true
+
+# Experiment Configuration
+experiments:
+  ablations:
+    - "routing_mechanism"
+    - "expert_initialization"
+    - "integration_scheme"
+    - "n_experts"
+    - "temperature"
+    - "regularization"
+  baselines:
+    - "single_neural_ode"
+    - "traditional_moe"
+    - "multi_scale_neural_ode"
+    - "augmented_neural_ode"
+    - "ensemble_neural_ode"
+    - "adaptive_neural_ode"
+
+# Computational Resources
+compute:
+  device: "cuda"
+  mixed_precision: true
+  gradient_checkpointing: true
+  multi_gpu: false
+  num_workers: 4
+
+# Logging and Checkpointing
+logging:
+  log_dir: "./logs"
+  checkpoint_dir: "./checkpoints"
+  tensorboard: true
+  wandb:
+    enabled: false
+    project: "ame-ode"
+    entity: null
+  save_frequency: 10
+  log_frequency: 100
+
+# Reproducibility
+seed: 42
+deterministic: true

@@ -1,0 +1,98 @@
+# Configuration for stiff dynamics experiments
+
+# Model Architecture - specialized for stiff systems
+model:
+  n_experts: 4
+  expert_architecture:
+    depth: 6  # Deeper for complex stiff dynamics
+    width: 128
+    activation: "elu"  # Smooth activation
+    residual: true
+    dropout: 0.2  # Higher dropout for regularization
+  gating_architecture:
+    depth: 3
+    width: 64
+    activation: "tanh"
+  history_embedding:
+    type: "lstm"
+    hidden_dim: 48
+    num_layers: 2
+  temperature: 0.3  # Very sharp routing for stiff/non-stiff
+  expert_threshold: 0.01
+
+# Training Configuration - careful training for stiff systems
+training:
+  batch_size: 32
+  learning_rate: 1e-4  # Lower learning rate
+  num_epochs: 250
+  early_stopping_patience: 40
+  gradient_clip_norm: 0.1  # Aggressive clipping
+  sequence_length: 80
+  optimizer: "adamw"
+  scheduler:
+    type: "cosine"
+    warmup_epochs: 50  # Longer warmup
+    min_lr: 1e-7
+  regularization:
+    route_weight: 0.01  # Minimal routing regularization
+    expert_weight: 1e-3  # Higher weight decay
+    diversity_weight: 3.0  # Strong diversity
+    smoothness_weight: 0.01  # Allow sharp transitions
+    balance_weight: 0.1
+  # Stability-aware training
+  use_stability_loss: true
+  lyapunov_weight: 0.5
+  energy_weight: 0.1
+
+# Integration Configuration - specialized for stiff ODEs
+integration:
+  method: "dopri5"  # Adaptive method crucial
+  rtol: 1e-7
+  atol: 1e-9
+  max_step_size: 0.01  # Small max step
+  min_step_size: 1e-8
+  adaptive_step: true
+  routing_aware_step: true
+  adjoint: false  # Avoid for stability
+
+# Data Configuration - stiff test systems
+data:
+  synthetic_systems:
+    - name: "van_der_pol_network"
+      enabled: true
+      n_trajectories: 6000
+      trajectory_length: 150
+      sampling_dt: 0.002  # Fine sampling
+      params:
+        n_oscillators: [4, 6]
+        mu_range: [0.1, 5.0]  # Wide range for stiffness
+  noise:
+    observation_noise: 0.001  # Low noise
+    process_noise: 0.0001
+  temporal_sampling: "adaptive"  # Critical for stiff systems
+  augmentation:
+    random_rotation: false
+    random_scaling: false
+    noise_injection: false  # No augmentation for stiff
+
+# Computational Resources
+compute:
+  device: "cuda"
+  mixed_precision: false  # Disable for numerical precision
+  gradient_checkpointing: true
+  multi_gpu: false
+  num_workers: 4
+
+# Evaluation - focus on stability
+evaluation:
+  metrics:
+    - "trajectory_mse"
+    - "computational_efficiency"
+    - "long_term_stability"
+    - "energy_conservation"
+    - "routing_stability"
+  visualization:
+    phase_portraits: true
+    routing_heatmaps: true
+    trajectory_decomposition: true
+    loss_landscape: true

@@ -1,0 +1,101 @@
+# Quick test configuration for development and debugging
+
+# Model Architecture - minimal for fast testing
+model:
+  state_dim: 4  # Will be overridden dynamically based on the data
+  n_experts: 2
+  expert_architecture:
+    depth: 3
+    width: 64  # Increased capacity for better dynamics learning
+    activation: "relu"
+    residual: true
+    dropout: 0.0
+  gating_architecture:
+    depth: 2
+    width: 16
+    activation: "relu"
+  history_embedding:
+    type: "lstm"
+    hidden_dim: 16
+    num_layers: 1
+  temperature: 1.0
+  expert_threshold: 0.01
+
+# Training Configuration - minimal epochs
+training:
+  batch_size: 16
+  learning_rate: 1e-3
+  num_epochs: 50  # Very short
+  early_stopping_patience: 15
+  gradient_clip_norm: 1.0
+  sequence_length: 50
+  optimizer: "adam"
+  scheduler:
+    type: "cosine"
+    warmup_epochs: 2
+    min_lr: 1e-5
+  regularization:
+    route_weight: 0.001     # Reduced - let model focus on reconstruction first
+    expert_weight: 1e-5     # L2 regularization on expert parameters
+    diversity_weight: 0.001 # Reduced - diversity is good but reconstruction is primary
+    smoothness_weight: 0.001 # Reduced - temporal consistency
+    balance_weight: 0.01    # Reduced significantly - balance is achieved, now focus on accuracy
+
+# Integration Configuration - fast settings
+integration:
+  method: "rk4"
+  rtol: 1e-3
+  atol: 1e-4
+  max_step_size: 0.1
+  min_step_size: 1e-4
+  adaptive_step: false  # Fixed step for speed
+  routing_aware_step: false
+
+# Data Configuration - small dataset
+data:
+  synthetic_systems:
+    - name: "multi_scale_oscillators"
+      enabled: true
+      n_trajectories: 500  # Small dataset
+      trajectory_length: 50
+      sampling_dt: 0.02
+      params:
+        freq_fast: 10.0
+        freq_slow: 0.1
+        coupling_strength: [0.05, 0.05]
+  noise:
+    observation_noise: 0.01
+    process_noise: 0.0
+  train_val_test_split: [0.6, 0.2, 0.2]
+  temporal_sampling: "uniform"
+  augmentation:
+    random_rotation: false
+    random_scaling: false
+
+# Computational Resources
+compute:
+  device: "cuda"
+  mixed_precision: false
+  gradient_checkpointing: false
+  multi_gpu: false
+  num_workers: 2
+
+# Logging - frequent for debugging
+logging:
+  log_dir: "./logs_test"
+  checkpoint_dir: "./checkpoints_test"
+  tensorboard: true
+  wandb:
+    enabled: false
+  save_frequency: 5
+  log_frequency: 10
+
+# Evaluation - minimal metrics
+evaluation:
+  metrics:
+    - "trajectory_mse"
+    - "computational_efficiency"
+  visualization:
+    phase_portraits: true
+    routing_heatmaps: false
+    trajectory_decomposition: false

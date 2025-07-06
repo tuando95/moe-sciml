@@ -1,0 +1,92 @@
+# Configuration for large-scale system experiments
+
+# Model Architecture - efficient for high dimensions
+model:
+  n_experts: 8
+  expert_architecture:
+    depth: 3  # Shallower for efficiency
+    width: 512  # Wider networks
+    activation: "swish"
+    residual: true
+    dropout: 0.0
+  gating_architecture:
+    depth: 2
+    width: 256
+    activation: "relu"
+  history_embedding:
+    type: "lstm"
+    hidden_dim: 128
+    num_layers: 1
+  temperature: 1.0
+  expert_threshold: 0.1  # Higher threshold for sparsity
+
+# Training Configuration - optimized for large systems
+training:
+  batch_size: 16  # Smaller batch for memory
+  learning_rate: 1e-3
+  num_epochs: 150
+  early_stopping_patience: 20
+  gradient_clip_norm: 1.0
+  sequence_length: 100
+  optimizer: "adam"
+  scheduler:
+    type: "step"
+    step_size: 50
+    gamma: 0.5
+  regularization:
+    route_weight: 0.5  # Encourage sparse routing
+    expert_weight: 1e-4
+    diversity_weight: 1.0
+    smoothness_weight: 0.1
+    balance_weight: 0.5
+
+# Integration Configuration
+integration:
+  method: "rk4"  # Faster than dopri5
+  rtol: 1e-4
+  atol: 1e-5
+  max_step_size: 0.1
+  min_step_size: 1e-5
+  adaptive_step: true
+  routing_aware_step: false  # Disable for speed
+
+# Data Configuration - high-dimensional systems
+data:
+  synthetic_systems:
+    - name: "kuramoto_model"
+      enabled: true
+      n_trajectories: 5000
+      trajectory_length: 100
+      sampling_dt: 0.01
+      params:
+        n_oscillators: [20, 50]
+        coupling_strength: [1.0, 4.0]
+  noise:
+    observation_noise: 0.01
+    process_noise: 0.001
+  temporal_sampling: "uniform"
+  augmentation:
+    random_rotation: false
+    random_scaling: true
+    noise_injection: true
+    noise_level: 0.005
+
+# Computational Resources
+compute:
+  device: "cuda"
+  mixed_precision: true  # Enable for efficiency
+  gradient_checkpointing: true  # Save memory
+  multi_gpu: false
+  num_workers: 8
+
+# Evaluation - focus on scalability
+evaluation:
+  metrics:
+    - "trajectory_mse"
+    - "computational_efficiency"
+    - "expert_specialization"
+    - "routing_stability"
+  visualization:
+    phase_portraits: false  # Skip for high-dim
+    routing_heatmaps: true
+    trajectory_decomposition: false
