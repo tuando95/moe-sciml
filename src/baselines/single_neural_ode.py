@@ -375,15 +375,25 @@ class EnsembleNeuralODE(nn.Module):
         
         # Different initialization scales for diversity
         net = nn.Sequential(*layers)
+        
+        # More conservative initialization to prevent instability
+        for layer in net:
+            if isinstance(layer, nn.Linear):
+                # Use xavier initialization with reduced gain
+                nn.init.xavier_normal_(layer.weight, gain=0.5)
+                if layer.bias is not None:
+                    nn.init.zeros_(layer.bias)
+        
+        # Vary final layer scaling more conservatively
         if model_id % 2 == 0:
-            net[-1].weight.data *= 0.5
+            net[-1].weight.data *= 0.8
         else:
-            net[-1].weight.data *= 2.0
+            net[-1].weight.data *= 1.2
             
         return net
     
     def forward(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
-        """Ensemble average of dynamics."""
+        """Ensemble average of dynamics with stability control."""
         if t.dim() == 0:
             t = t.unsqueeze(0).expand(x.shape[0])
         if t.dim() == 1:
@@ -396,9 +406,30 @@ class EnsembleNeuralODE(nn.Module):
         # Average predictions from all models
         predictions = []
         for model in self.models:
-            predictions.append(model(inputs))
+            pred = model(inputs)
+            
+            # Bound individual model predictions to prevent outliers
+            pred_norm = torch.norm(pred, dim=-1, keepdim=True)
+            max_norm = 10.0
+            scaling_factor = torch.minimum(
+                torch.ones_like(pred_norm),
+                max_norm / (pred_norm + 1e-6)
+            )
+            pred = pred * scaling_factor
+            
+            predictions.append(pred)
         
-        return torch.stack(predictions).mean(dim=0)
+        # Average the bounded predictions
+        dx_dt = torch.stack(predictions).mean(dim=0)
+        
+        # Additional stability check on the final average
+        dx_dt_norm = torch.norm(dx_dt, dim=-1, keepdim=True)
+        final_scaling = torch.minimum(
+            torch.ones_like(dx_dt_norm),
+            max_norm / (dx_dt_norm + 1e-6)
+        )
+        
+        return dx_dt * final_scaling
     
     def integrate(
         self,
@@ -449,16 +480,25 @@ class TraditionalMoE(nn.Module):
         
         # Expert networks (now with temporal input)
         input_dim = self.state_dim + 3  # state + t + sin(t) + cos(t)
-        self.experts = nn.ModuleList([
-            nn.Sequential(
+        self.experts = nn.ModuleList()
+        
+        for i in range(self.n_experts):
+            expert = nn.Sequential(
                 nn.Linear(input_dim, hidden_dim),
                 nn.ReLU(),
                 nn.Linear(hidden_dim, hidden_dim),
                 nn.ReLU(),
                 nn.Linear(hidden_dim, self.state_dim)
             )
-            for _ in range(self.n_experts)
-        ])
+            
+            # Initialize with small weights for stability
+            for layer in expert:
+                if isinstance(layer, nn.Linear):
+                    nn.init.xavier_normal_(layer.weight, gain=0.5)
+                    if layer.bias is not None:
+                        nn.init.zeros_(layer.bias)
+            
+            self.experts.append(expert)
         
         # Gating network with temporal information
         self.gate = nn.Sequential(
@@ -495,7 +535,18 @@ class TraditionalMoE(nn.Module):
         # Compute weighted expert outputs
         output = torch.zeros_like(x)
         for i, expert in enumerate(self.experts):
-            output += weights[:, i:i+1] * expert(inputs)
+            expert_out = expert(inputs)
+            
+            # Bound expert outputs for stability
+            expert_norm = torch.norm(expert_out, dim=-1, keepdim=True)
+            max_norm = 10.0
+            scaling_factor = torch.minimum(
+                torch.ones_like(expert_norm),
+                max_norm / (expert_norm + 1e-6)
+            )
+            expert_out = expert_out * scaling_factor
+            
+            output += weights[:, i:i+1] * expert_out
         
         return output
     
