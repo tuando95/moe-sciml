@@ -1,76 +1,114 @@
 # Configuration for Lorenz system experiments
+# Adapted from quick_test.yml with settings optimized for chaotic dynamics
 
-# Inherit from base config
-base_config: config.yml
-
-# Model Architecture - optimized for chaotic dynamics
+# Model Architecture - optimized for chaotic dynamics with sparse routing
 model:
-  n_experts: 6  # More experts for complex dynamics
+  state_dim: 3  # Lorenz system has 3 state variables
+  n_experts: 6  # Reduced from 6 - fewer but more specialized experts
   expert_architecture:
-    depth: 5
-    width: 256
-    activation: "tanh"  # Better for smooth dynamics
+    depth: 5  # Same as quick_test
+    width: 256  # Same as quick_test - wider for capacity
+    activation: "tanh"  # Better for continuous dynamics
     residual: true
-    dropout: 0.1
+    dropout: 0.0  # No dropout for stability
   gating_architecture:
-    depth: 4
-    width: 128
+    depth: 4  # Same as quick_test
+    width: 128  # Same as quick_test
     activation: "relu"
   history_embedding:
     type: "lstm"
-    hidden_dim: 64
-    num_layers: 2
-  temperature: 0.5  # Sharper routing for distinct regimes
-  expert_threshold: 0.05
+    hidden_dim: 64  # Same as quick_test
+    num_layers: 2  # Single layer for simplicity
+  temperature: 0.3  # Lower temperature for sharper routing (fewer active experts)
+  expert_threshold: 0.2  # Higher threshold to force sparser routing
+  # Initialization settings
+  use_improved_init: true
+  expert_init_strategy: "mixed"  # Better for diverse experts
+  gating_init_strategy: "uniform"  # Start with uniform routing
 
-# Training Configuration - longer training for complex dynamics
+# Training Configuration - adapted for Lorenz dynamics
 training:
-  batch_size: 64
-  learning_rate: 5e-4
-  num_epochs: 300
-  early_stopping_patience: 30
-  gradient_clip_norm: 0.5  # More aggressive clipping for stability
-  sequence_length: 150
-  optimizer: "adamw"
+  batch_size: 2048  # Larger batch than original but smaller than quick_test
+  learning_rate: 3e-4  # Same as quick_test
+  num_epochs: 250  # Moderate training time
+  early_stopping_patience: 35
+  gradient_clip_norm: 5.0  # Less restrictive clipping
+  sequence_length: 100  # Longer sequences for chaos
+  optimizer: "adam"  # Simpler than adamw
   scheduler:
     type: "cosine"
-    warmup_epochs: 30
+    warmup_epochs: 10
     min_lr: 1e-6
   regularization:
-    route_weight: 0.05  # Less routing regularization
-    expert_weight: 5e-5
-    diversity_weight: 2.0  # Higher diversity for distinct regimes
-    smoothness_weight: 0.05
-    balance_weight: 0.2
+    route_weight: 0.1        # Encourage sparse routing
+    expert_weight: 1e-6      # Very light L2 regularization
+    diversity_weight: 0.0    # No diversity penalty - let experts specialize
+    smoothness_weight: 0.01  # Small smoothness penalty for stable chaos tracking
+    balance_weight: 0.0      # No balance penalty - natural specialization
 
 # Integration Configuration - tighter tolerances for chaos
 integration:
   method: "dopri5"
-  rtol: 1e-6
-  atol: 1e-8
-  max_step_size: 0.05
-  min_step_size: 1e-7
-  adaptive_step: true
+  rtol: 1e-5  # Tighter than quick_test but not too tight
+  atol: 1e-7  # Tighter for chaos
+  max_step_size: 0.05  # Smaller for chaos
+  min_step_size: 1e-6
+  adaptive_step: true  # Fixed step for consistency
   routing_aware_step: true
+  # Stability control
+  dynamics_max_norm: 50.0  # No dynamics bounding for AME-ODE
 
 # Data Configuration
 data:
   synthetic_systems:
     - name: "piecewise_lorenz"
       enabled: true
-      n_trajectories: 8000
+      n_trajectories: 10000  # More data for better learning
       trajectory_length: 100
-      sampling_dt: 0.005
+      sampling_dt: 0.005  # Fine sampling for chaos
       params:
         sigma: [9, 11]
         rho: [26, 30]
         beta: [2.3, 2.8]
         switching_radius: [8, 12]
   noise:
-    observation_noise: 0.005
-    process_noise: 0.0005
-  temporal_sampling: "adaptive"  # Focus on fast-changing regions
+    observation_noise: 0.01  # Same as quick_test
+    process_noise: 0.0001   # Same as quick_test - small process noise
+  train_val_test_split: [0.6, 0.2, 0.2]
+  temporal_sampling: "uniform"  # Simpler than adaptive
   augmentation:
     random_rotation: true
-    random_scaling: false  # Preserve chaos characteristics
-    noise_injection: false
+    random_scaling: true  # Enable for robustness
+
+# Computational Resources
+compute:
+  device: "cuda"
+  mixed_precision: false
+  gradient_checkpointing: false
+  multi_gpu: false
+  num_workers: 2
+
+# Logging
+logging:
+  log_dir: "./logs_lorenz"
+  checkpoint_dir: "./checkpoints_lorenz"
+  tensorboard: true
+  wandb:
+    enabled: false
+  save_frequency: 10
+  log_frequency: 10
+
+# Evaluation - comprehensive metrics
+evaluation:
+  metrics:
+    - "trajectory_mse"
+    - "computational_efficiency"
+    - "expert_specialization"
+    - "long_term_stability"
+    - "phase_space_geometry"
+    - "energy_conservation"
+    - "routing_stability"
+  visualization:
+    phase_portraits: true
+    routing_heatmaps: true  # Enable for Lorenz
+    trajectory_decomposition: true  # Enable to see expert contributions

@@ -75,11 +75,12 @@ class ExpertODE(nn.Module):
         Returns:
             dx/dt tensor of shape (batch_size, state_dim)
         """
-        # Ensure t is properly shaped
+        # Ensure t is properly shaped and on the same device as x
         if t.dim() == 0:
             t = t.unsqueeze(0)
         if t.shape[0] == 1 and x.shape[0] > 1:
             t = t.expand(x.shape[0])
+        t = t.to(x.device)
         
         # Temporal encoding
         sin_wt = torch.sin(self.omega * t).unsqueeze(-1)

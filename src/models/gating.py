@@ -52,8 +52,9 @@ class DynamicsHistoryEncoder(nn.Module):
         
         # Initialize hidden state if not provided
         if hidden is None:
-            h = self.h0.expand(-1, batch_size, -1).contiguous()
-            c = self.c0.expand(-1, batch_size, -1).contiguous()
+            # Ensure parameters are on the same device as input
+            h = self.h0.expand(-1, batch_size, -1).contiguous().to(x.device)
+            c = self.c0.expand(-1, batch_size, -1).contiguous().to(x.device)
             hidden = (h, c)
         
         # Concatenate state and dynamics
@@ -126,11 +127,12 @@ class GatingNetwork(nn.Module):
         Returns:
             Gating weights (batch_size, n_experts)
         """
-        # Ensure proper shapes
+        # Ensure proper shapes and device
         if t.dim() == 0:
             t = t.unsqueeze(0).expand(x.shape[0])
         if t.dim() == 1:
             t = t.unsqueeze(-1)
+        t = t.to(x.device)
         
         # Compute norms
         x_norm = torch.norm(x, dim=-1, keepdim=True)
