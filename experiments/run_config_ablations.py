@@ -51,7 +51,11 @@ def run_single_experiment(config_path: Path, gpu_id: int = 0) -> Dict[str, Any]:
     exp_name = config_path.stem
     
     # Run training
-    print(f"\nRunning experiment: {exp_name} on GPU {gpu_id}")
+    print(f"\n{'='*60}")
+    print(f"Running experiment: {exp_name}")
+    print(f"Config: {config_path}")
+    print(f"GPU: {gpu_id}")
+    print('='*60)
     start_time = time.time()
     
     # Get system name from config
@@ -71,36 +75,65 @@ def run_single_experiment(config_path: Path, gpu_id: int = 0) -> Dict[str, Any]:
     ]
     
     try:
-        result = subprocess.run(
+        # Run with real-time output
+        process = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             env=env,
-            check=True
+            bufsize=1,
+            universal_newlines=True
         )
+        
+        # Collect output while showing it
+        output_lines = []
+        for line in process.stdout:
+            print(f"  {line.rstrip()}")  # Indent output
+            output_lines.append(line)
+        
+        # Wait for completion
+        return_code = process.wait()
         training_time = time.time() - start_time
         
+        if return_code != 0:
+            raise subprocess.CalledProcessError(return_code, cmd)
+        
         # Parse output to extract final metrics
-        metrics = parse_training_output(result.stdout)
+        full_output = ''.join(output_lines)
+        metrics = parse_training_output(full_output)
         metrics['training_time'] = training_time
         metrics['status'] = 'success'
+        
+        print(f"\n✓ Completed {exp_name} in {training_time:.1f}s")
         
         return {
             'config': str(config_path),
             'experiment': exp_name,
             'metrics': metrics,
-            'stdout': result.stdout,
-            'stderr': result.stderr
+            'stdout': full_output,
+            'stderr': ''
         }
         
     except subprocess.CalledProcessError as e:
+        print(f"\n✗ Failed {exp_name} with return code {e.returncode}")
         return {
             'config': str(config_path),
             'experiment': exp_name,
             'status': 'failed',
             'error': str(e),
-            'stdout': e.stdout,
-            'stderr': e.stderr
+            'stdout': ''.join(output_lines) if 'output_lines' in locals() else '',
+            'stderr': ''
+        }
+    except Exception as e:
+        print(f"\n✗ Error in {exp_name}: {str(e)}")
+        return {
+            'config': str(config_path),
+            'experiment': exp_name,
+            'status': 'failed',
+            'error': str(e),
+            'stdout': ''.join(output_lines) if 'output_lines' in locals() else '',
+            'stderr': ''
         }
 
 
@@ -175,9 +208,15 @@ def run_ablation_category(
     output_dir: Path = Path('ablation_results')
 ) -> Dict[str, Any]:
     """Run all ablations in a category."""
+    print(f"\n{'='*80}")
+    print(f"ABLATION CATEGORY: {category.upper()}")
+    print('='*80)
+    
     # Find all config files for this category
     if category == 'all':
         config_files = list(config_dir.glob('*.yml'))
+        # Remove base config from experiments
+        config_files = [cf for cf in config_files if not cf.name.startswith('base_')]
     else:
         config_files = list(config_dir.glob(f'{category}*.yml'))
     
@@ -185,9 +224,9 @@ def run_ablation_category(
         print(f"No config files found for category: {category}")
         return {}
     
-    print(f"\nFound {len(config_files)} configurations for {category}")
-    for cf in config_files:
-        print(f"  - {cf.name}")
+    print(f"\nFound {len(config_files)} configurations to run:")
+    for i, cf in enumerate(config_files, 1):
+        print(f"  {i}. {cf.name}")
     
     # Create output directory
     category_dir = output_dir / category
@@ -248,8 +287,16 @@ def run_ablation_category(
 def print_category_summary(category: str, results: Dict[str, Any]):
     """Print summary of ablation results for a category."""
     print("\n" + "="*80)
-    print(f"ABLATION CATEGORY SUMMARY: {category}")
+    print(f"ABLATION CATEGORY SUMMARY: {category.upper()}")
     print("="*80)
+    
+    # Count successes and failures
+    success_count = sum(1 for r in results.values() if r.get('status') == 'success')
+    fail_count = len(results) - success_count
+    
+    print(f"\nTotal experiments: {len(results)}")
+    print(f"  ✓ Successful: {success_count}")
+    print(f"  ✗ Failed: {fail_count}")
     
     # Find baseline
     baseline_name = 'base_multiscale'
@@ -382,10 +429,13 @@ def main():
             categories = ['routing', 'experts', 'temp', 'reg']
             all_results = {}
             
-            for category in categories:
-                print(f"\n{'='*80}")
-                print(f"Running {category} ablations...")
-                print('='*80)
+            print(f"\nRunning ALL ablation categories: {', '.join(categories)}")
+            print(f"Total categories: {len(categories)}")
+            
+            for i, category in enumerate(categories, 1):
+                print(f"\n{'#'*80}")
+                print(f"# CATEGORY {i}/{len(categories)}: {category.upper()}")
+                print('#'*80)
                 
                 results = run_ablation_category(
                     category,
