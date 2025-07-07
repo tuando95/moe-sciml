@@ -33,8 +33,8 @@ class SingleNeuralODE(nn.Module):
         self.net = self._build_network()
         
         # Integration settings
-        self.rtol = config['integration']['rtol']
-        self.atol = config['integration']['atol']
+        self.rtol = float(config['integration']['rtol'])
+        self.atol = float(config['integration']['atol'])
         self.method = config['integration']['method']
         self.adjoint = config['integration'].get('adjoint', True)
         self.max_norm = config['integration'].get('dynamics_max_norm', 0.0)  # 0 = no limit
@@ -153,8 +153,8 @@ class MultiScaleNeuralODE(nn.Module):
         )
         
         # Integration settings
-        self.rtol = config['integration']['rtol']
-        self.atol = config['integration']['atol']
+        self.rtol = float(config['integration']['rtol'])
+        self.atol = float(config['integration']['atol'])
         self.method = config['integration']['method']
         self.adjoint = config['integration'].get('adjoint', True)
         self.max_norm = config['integration'].get('dynamics_max_norm', 0.0)  # 0 = no limit
@@ -269,8 +269,8 @@ class AugmentedNeuralODE(nn.Module):
                     nn.init.zeros_(layer.bias)
         
         # Integration settings
-        self.rtol = config['integration']['rtol']
-        self.atol = config['integration']['atol']
+        self.rtol = float(config['integration']['rtol'])
+        self.atol = float(config['integration']['atol'])
         self.method = config['integration']['method']
         self.adjoint = config['integration'].get('adjoint', True)
         self.max_norm = config['integration'].get('dynamics_max_norm', 0.0)  # 0 = no limit
@@ -357,8 +357,8 @@ class EnsembleNeuralODE(nn.Module):
         ])
         
         # Integration settings
-        self.rtol = config['integration']['rtol']
-        self.atol = config['integration']['atol']
+        self.rtol = float(config['integration']['rtol'])
+        self.atol = float(config['integration']['atol'])
         self.method = config['integration']['method']
         self.adjoint = config['integration'].get('adjoint', True)
         self.max_norm = config['integration'].get('dynamics_max_norm', 0.0)  # 0 = no limit
