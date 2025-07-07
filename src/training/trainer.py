@@ -325,6 +325,10 @@ class AMEODETrainer:
     
     def save_checkpoint(self, is_best: bool = False):
         """Save model checkpoint."""
+        # Move model to CPU temporarily to save GPU memory
+        device = next(self.model.parameters()).device
+        self.model.cpu()
+        
         checkpoint = {
             'epoch': self.current_epoch,
             'model_state_dict': self.model.state_dict(),
@@ -337,18 +341,28 @@ class AMEODETrainer:
             'reg_adjustment_history': self.reg_adjustment_history,
         }
         
-        # Save regular checkpoint
-        checkpoint_path = self.checkpoint_dir / f'checkpoint_epoch_{self.current_epoch}.pt'
-        torch.save(checkpoint, checkpoint_path)
+        # Save regular checkpoint only every N epochs to reduce I/O
+        if self.current_epoch % self.config.logging['save_frequency'] == 0:
+            checkpoint_path = self.checkpoint_dir / f'checkpoint_epoch_{self.current_epoch}.pt'
+            torch.save(checkpoint, checkpoint_path)
         
         # Save best checkpoint
         if is_best:
             best_path = self.checkpoint_dir / 'best_model.pt'
             torch.save(checkpoint, best_path)
         
-        # Save latest checkpoint
+        # Always save latest checkpoint (overwrite previous)
         latest_path = self.checkpoint_dir / 'latest_model.pt'
         torch.save(checkpoint, latest_path)
+        
+        # Move model back to original device
+        self.model.to(device)
+        
+        # Force garbage collection to free memory
+        import gc
+        gc.collect()
+        if device.type == 'cuda':
+            torch.cuda.empty_cache()
     
     def load_checkpoint(self, checkpoint_path: Path):
         """Load model checkpoint."""
@@ -419,8 +433,8 @@ class AMEODETrainer:
             else:
                 patience_counter += 1
             
-            # Save checkpoint
-            if epoch % self.config.logging['save_frequency'] == 0 or is_best:
+            # Save checkpoint (save_checkpoint now handles frequency internally)
+            if is_best or epoch % self.config.logging['save_frequency'] == 0:
                 self.save_checkpoint(is_best)
             
             # Early stopping
