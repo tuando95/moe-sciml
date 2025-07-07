@@ -79,23 +79,23 @@ class AMEODE(nn.Module):
         )
         
         # Integration settings
-        self.rtol = self.integration_config['rtol']
-        self.atol = self.integration_config['atol']
+        self.rtol = float(self.integration_config['rtol'])
+        self.atol = float(self.integration_config['atol'])
         self.method = self.integration_config['method']
         self.adjoint = self.integration_config.get('adjoint', True)
         
         # Adaptive step size parameters
-        self.max_step_size = self.integration_config['max_step_size']
-        self.min_step_size = self.integration_config['min_step_size']
+        self.max_step_size = float(self.integration_config['max_step_size'])
+        self.min_step_size = float(self.integration_config['min_step_size'])
         self.adaptive_step = self.integration_config['adaptive_step']
         self.routing_aware_step = self.integration_config['routing_aware_step']
         
         # Expert threshold for computation
-        self.expert_threshold = self.model_config['expert_threshold']
+        self.expert_threshold = float(self.model_config['expert_threshold'])
         
         # Temperature for gating (prefer gating_architecture setting, fallback to model setting)
         gating_config = self.model_config.get('gating_architecture', {})
-        self.temperature = gating_config.get('temperature', self.model_config.get('temperature', 1.0))
+        self.temperature = float(gating_config.get('temperature', self.model_config.get('temperature', 1.0)))
     
     def compute_dynamics(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
         """Compute dynamics dx/dt = Σ g_i(x,h,t) * f_i(x,t)."""
