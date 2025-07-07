@@ -252,8 +252,14 @@ class AdaptiveGatingModule(nn.Module):
         Returns:
             Gating weights and history embedding
         """
-        # Update history
-        history, new_hidden = self.history_encoder(x, dx_dt, self.hidden_states)
+        # Check if batch size changed or if we shouldn't update history
+        if not update_history or (self.hidden_states is not None and 
+                                  self.hidden_states[0].shape[1] != x.shape[0]):
+            # Use fresh hidden states for this forward pass
+            history, new_hidden = self.history_encoder(x, dx_dt, None)
+        else:
+            # Update history with cached states
+            history, new_hidden = self.history_encoder(x, dx_dt, self.hidden_states)
         
         if update_history:
             self.hidden_states = new_hidden

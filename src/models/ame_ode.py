@@ -97,14 +97,23 @@ class AMEODE(nn.Module):
         gating_config = self.model_config.get('gating_architecture', {})
         self.temperature = float(gating_config.get('temperature', self.model_config.get('temperature', 1.0)))
     
-    def compute_dynamics(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
-        """Compute dynamics dx/dt = Σ g_i(x,h,t) * f_i(x,t)."""
+    def compute_dynamics(self, t: torch.Tensor, x: torch.Tensor, update_history: bool = True) -> torch.Tensor:
+        """Compute dynamics dx/dt = Σ g_i(x,h,t) * f_i(x,t).
+        
+        Args:
+            t: Time tensor
+            x: State tensor
+            update_history: Whether to update gating history (default True for training)
+            
+        Returns:
+            dx_dt: Time derivative of state
+        """
         # Initial estimate using uniform weights
         uniform_weights = torch.ones(x.shape[0], self.n_experts, device=x.device) / self.n_experts
         dx_dt_init = self.experts(t, x, uniform_weights)
         
         # Compute gating weights
-        weights, _ = self.gating(x, dx_dt_init, t, update_history=True)
+        weights, _ = self.gating(x, dx_dt_init, t, update_history=update_history)
         
         # Compute weighted mixture of expert dynamics
         dx_dt = self.experts(t, x, weights)

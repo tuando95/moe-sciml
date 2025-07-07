@@ -259,11 +259,15 @@ class StabilityAwareLoss(AMEODELoss):
                 dt = torch.tensor(0.01, device=x_t.device)  # Small time step
                 # Use compute_dynamics for AME-ODE compatibility
                 if hasattr(model, 'compute_dynamics'):
-                    # AME-ODE: compute_dynamics returns dynamics and model_info
-                    dx_perturbed, _ = model.compute_dynamics(torch.tensor(t * dt), x_perturbed)
+                    # AME-ODE: compute_dynamics returns only dynamics
+                    # Create time tensor properly to avoid warning
+                    t_tensor = (t * dt).clone().detach()
+                    # Don't update history during stability loss computation
+                    dx_perturbed = model.compute_dynamics(t_tensor, x_perturbed, update_history=False)
                 else:
                     # Fallback for other models with ode_func
-                    dx_perturbed = model.ode_func(torch.tensor(t * dt), x_perturbed)
+                    t_tensor = (t * dt).clone().detach()
+                    dx_perturbed = model.ode_func(t_tensor, x_perturbed)
                 x_next_perturbed = x_perturbed + dt * dx_perturbed
             
             # Measure divergence
