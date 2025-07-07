@@ -326,12 +326,13 @@ class VanDerPolNetwork(SyntheticSystem):
     """Network of coupled Van der Pol oscillators."""
     
     def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        
-        # Network parameters
+        # Network parameters - set before calling super().__init__()
         params = config.get('params', {})
         self.n_oscillators = np.random.randint(*params.get('n_oscillators', [4, 8]))
         self.mu_range = params.get('mu_range', [0.1, 3.0])
+        
+        # Now call parent init which will call _get_state_dim()
+        super().__init__(config)
         
         # Sample parameters
         self.mu = torch.FloatTensor(self.n_oscillators).uniform_(*self.mu_range).to(self.device)
@@ -408,13 +409,15 @@ class FitzHughNagumo(SyntheticSystem):
         return self.n_neurons * 2  # voltage + recovery for each neuron
     
     def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        
+        # Set parameters needed by _get_state_dim() before calling super().__init__()
         params = config.get('params', {})
         self.n_neurons = params.get('n_neurons', 10)
         self.a = params.get('a', 0.7)  # Recovery timescale
         self.b = params.get('b', 0.8)  # Recovery coupling
         self.I_ext_range = params.get('I_ext', [0.0, 0.5])  # External current
+        
+        # Now call parent init
+        super().__init__(config)
         
         # Heterogeneous parameters for each neuron
         self.I_ext = torch.linspace(*self.I_ext_range, self.n_neurons).to(self.device)
@@ -495,10 +498,12 @@ class PredatorPreyMigration(SyntheticSystem):
         return self.n_patches * 2  # prey + predator in each patch
     
     def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        
+        # Set parameters needed by _get_state_dim() before calling super().__init__()
         params = config.get('params', {})
         self.n_patches = params.get('n_patches', 5)
+        
+        # Now call parent init
+        super().__init__(config)
         
         # Heterogeneous carrying capacities (environmental gradient)
         self.K = torch.linspace(0.5, 2.0, self.n_patches).to(self.device)
