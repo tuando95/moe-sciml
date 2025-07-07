@@ -16,6 +16,7 @@ class SyntheticSystem(ABC):
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.state_dim = self._get_state_dim()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
     @abstractmethod
     def _get_state_dim(self) -> int:
@@ -58,14 +59,39 @@ class SyntheticSystem(ABC):
             trajectories = self._integrate_sde(x0, t_span, process_noise_std)
         else:
             # Use standard ODE integration
-            trajectories = odeint(
-                self.dynamics,
-                x0,
-                t_span,
-                method='dopri5',
-                rtol=1e-6,
-                atol=1e-8,
-            )
+            # For large batches, split into chunks to show progress
+            if n_trajectories > 100:
+                chunk_size = min(500, n_trajectories // 10)  # Process in chunks
+                trajectories_list = []
+                
+                for i in tqdm(range(0, n_trajectories, chunk_size), 
+                             desc="Integrating trajectories", 
+                             leave=False):
+                    end_idx = min(i + chunk_size, n_trajectories)
+                    chunk_x0 = x0[i:end_idx]
+                    
+                    chunk_traj = odeint(
+                        self.dynamics,
+                        chunk_x0,
+                        t_span,
+                        method='dopri5',
+                        rtol=1e-6,
+                        atol=1e-8,
+                    )
+                    trajectories_list.append(chunk_traj)
+                
+                # Concatenate all chunks
+                trajectories = torch.cat(trajectories_list, dim=1)
+            else:
+                # Small batch - process all at once
+                trajectories = odeint(
+                    self.dynamics,
+                    x0,
+                    t_span,
+                    method='dopri5',
+                    rtol=1e-6,
+                    atol=1e-8,
+                )
         
         # Add observation noise if specified
         if noise_std > 0:
@@ -89,12 +115,12 @@ class SyntheticSystem(ABC):
         n_traj = x0.shape[0]
         state_dim = x0.shape[1]
         
-        # Initialize trajectory storage
-        trajectories = torch.zeros(n_steps, n_traj, state_dim)
+        # Initialize trajectory storage on same device as x0
+        trajectories = torch.zeros(n_steps, n_traj, state_dim, device=x0.device)
         trajectories[0] = x0
         
         # Euler-Maruyama integration
-        for i in range(1, n_steps):
+        for i in tqdm(range(1, n_steps), desc="SDE integration", leave=False):
             dt = t_span[i] - t_span[i-1]
             t = t_span[i-1]
             x = trajectories[i-1]
@@ -145,12 +171,12 @@ class MultiScaleOscillators(SyntheticSystem):
         self.theta_slow = torch.rand(1) * 2 * np.pi
         self.epsilon = np.random.uniform(*self.coupling_range)
         
-        # Rotation matrices
-        self.A_fast = self._rotation_matrix(self.theta_fast)
-        self.A_slow = self._rotation_matrix(self.theta_slow)
+        # Rotation matrices (move to GPU)
+        self.A_fast = self._rotation_matrix(self.theta_fast).to(self.device)
+        self.A_slow = self._rotation_matrix(self.theta_slow).to(self.device)
         
-        # Coupling matrix
-        self.C = torch.randn(2, 2) * 0.1
+        # Coupling matrix (move to GPU)
+        self.C = (torch.randn(2, 2) * 0.1).to(self.device)
     
     def _rotation_matrix(self, theta: torch.Tensor) -> torch.Tensor:
         """Create 2D rotation matrix."""
@@ -179,7 +205,7 @@ class MultiScaleOscillators(SyntheticSystem):
     
     def sample_initial_conditions(self, n_samples: int) -> torch.Tensor:
         """Sample from unit Gaussian."""
-        return torch.randn(n_samples, self.state_dim)
+        return torch.randn(n_samples, self.state_dim, device=self.device)
     
     def get_ground_truth_expert_assignment(
         self,
@@ -458,15 +484,18 @@ class SyntheticDataGenerator:
         else:
             raise ValueError(f"Unknown split: {split}")
         
-        # Generate time span
+        # Generate time span on GPU
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         t_span = torch.linspace(
             0,
             system_config['trajectory_length'],
-            int(system_config['trajectory_length'] / system_config['sampling_dt']) + 1
+            int(system_config['trajectory_length'] / system_config['sampling_dt']) + 1,
+            device=device
         )
         
         # Generate trajectories
         print(f"Generating {n_traj} trajectories for {system_name} ({split} split)...")
+        print(f"  Using device: {device}")
         noise_std = self.config['data']['noise']['observation_noise']
         process_noise_std = self.config['data']['noise'].get('process_noise', 0.0)
         
@@ -474,35 +503,36 @@ class SyntheticDataGenerator:
         if process_noise_std > 0:
             print(f"  Using SDE integration with process noise std={process_noise_std}")
         
-        with tqdm(total=1, desc="  Integrating ODEs", bar_format='{desc}: {bar}') as pbar:
-            x0, trajectories = system.generate_trajectories(
-                n_traj, t_span, noise_std, process_noise_std
-            )
-            pbar.update(1)
+        # Generate trajectories with progress tracking
+        x0, trajectories = system.generate_trajectories(
+            n_traj, t_span, noise_std, process_noise_std
+        )
+        print(f"  Generated trajectories shape: {trajectories.shape}")
         
         # Compute ground truth expert assignments (vectorized)
-        with tqdm(total=1, desc="  Computing expert assignments", bar_format='{desc}: {bar}') as pbar:
-            # Compute all derivatives at once
-            dx_dt = (trajectories[1:] - trajectories[:-1]) / system_config['sampling_dt']
-            
-            # Get expert assignments for all timesteps at once
-            # Reshape to (n_timesteps * n_trajectories, state_dim) for batch processing
-            n_timesteps = len(t_span) - 1
-            x_flat = trajectories[:-1].reshape(-1, system.state_dim)
-            dx_dt_flat = dx_dt.reshape(-1, system.state_dim)
-            
-            # Get all expert assignments at once
-            expert_assignments_flat = system.get_ground_truth_expert_assignment(x_flat, dx_dt_flat)
-            
-            # Reshape back to (n_timesteps, n_trajectories)
-            gt_experts = expert_assignments_flat.reshape(n_timesteps, n_traj)
-            pbar.update(1)
+        print("  Computing expert assignments...")
+        # Compute all derivatives at once
+        dx_dt = (trajectories[1:] - trajectories[:-1]) / system_config['sampling_dt']
         
+        # Get expert assignments for all timesteps at once
+        # Reshape to (n_timesteps * n_trajectories, state_dim) for batch processing
+        n_timesteps = len(t_span) - 1
+        x_flat = trajectories[:-1].reshape(-1, system.state_dim)
+        dx_dt_flat = dx_dt.reshape(-1, system.state_dim)
+        
+        # Get all expert assignments at once
+        expert_assignments_flat = system.get_ground_truth_expert_assignment(x_flat, dx_dt_flat)
+        
+        # Reshape back to (n_timesteps, n_trajectories)
+        gt_experts = expert_assignments_flat.reshape(n_timesteps, n_traj)
+        print(f"  Expert assignments shape: {gt_experts.shape}")
+        
+        # Move to CPU for caching (to save GPU memory and for compatibility)
         dataset = {
-            'initial_conditions': x0,
-            'trajectories': trajectories,
-            'times': t_span,
-            'ground_truth_experts': gt_experts,
+            'initial_conditions': x0.cpu(),
+            'trajectories': trajectories.cpu(),
+            'times': t_span.cpu(),
+            'ground_truth_experts': gt_experts.cpu(),
             'system_name': system_name,
             'state_dim': system.state_dim,
             'cache_key': cache_key,
