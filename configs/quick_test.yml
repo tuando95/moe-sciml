@@ -71,12 +71,12 @@ data:
         coupling_strength: [0.1, 0.1]  # Stronger coupling
   noise:
     observation_noise: 0.01
-    process_noise: 0.0
+    process_noise: 0.001
   train_val_test_split: [0.6, 0.2, 0.2]
   temporal_sampling: "uniform"
   augmentation:
-    random_rotation: false
-    random_scaling: false
+    random_rotation: true
+    random_scaling: true
 
 # Computational Resources
 compute:

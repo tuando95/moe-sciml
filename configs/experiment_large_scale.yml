@@ -46,20 +46,22 @@ training:
 
 # Integration Configuration
 integration:
-  method: "rk4"  # Faster than dopri5
-  rtol: 1e-4
-  atol: 1e-5
+  method: "dopri5"  # Better accuracy (from quick_test)
+  rtol: 1e-3
+  atol: 1e-4
   max_step_size: 0.1
-  min_step_size: 1e-5
-  adaptive_step: true
-  routing_aware_step: false  # Disable for speed
+  min_step_size: 1e-4
+  adaptive_step: false  # Fixed step for speed
+  routing_aware_step: false
+  # Stability control
+  dynamics_max_norm: 50.0  # From quick_test
 
 # Data Configuration - high-dimensional systems
 data:
   synthetic_systems:
     - name: "kuramoto_model"
       enabled: true
-      n_trajectories: 5000
+      n_trajectories: 10000  # More data (from quick_test approach)
       trajectory_length: 100
       sampling_dt: 0.01
       params:
@@ -67,28 +69,40 @@ data:
         coupling_strength: [1.0, 4.0]
   noise:
     observation_noise: 0.01
-    process_noise: 0.001
+    process_noise: 0.001  # No process noise (from quick_test)
+  train_val_test_split: [0.6, 0.2, 0.2]  # From quick_test
   temporal_sampling: "uniform"
   augmentation:
-    random_rotation: false
-    random_scaling: true
-    noise_injection: true
-    noise_level: 0.005
+    random_rotation: true
+    random_scaling: true  # Simpler augmentation
 
 # Computational Resources
 compute:
   device: "cuda"
-  mixed_precision: true  # Enable for efficiency
-  gradient_checkpointing: true  # Save memory
+  mixed_precision: false  # Disable for stability (from quick_test)
+  gradient_checkpointing: false  # Simpler setup
   multi_gpu: false
-  num_workers: 8
+  num_workers: 4  # Moderate workers
 
-# Evaluation - focus on scalability
+# Logging
+logging:
+  log_dir: "./logs_large_scale"
+  checkpoint_dir: "./checkpoints_large_scale"
+  tensorboard: true
+  wandb:
+    enabled: false
+  save_frequency: 5
+  log_frequency: 10
+
+# Evaluation - comprehensive metrics
 evaluation:
   metrics:
     - "trajectory_mse"
     - "computational_efficiency"
     - "expert_specialization"
+    - "long_term_stability"
+    - "phase_space_geometry"
+    - "energy_conservation"
     - "routing_stability"
   visualization:
     phase_portraits: false  # Skip for high-dim
