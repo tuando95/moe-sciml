@@ -47,8 +47,8 @@ training:
     balance_weight: 0.0      # Natural specialization
   # Stability-aware training (keep for stiff systems)
   use_stability_loss: true
-  lyapunov_weight: 0.1  # Reduced from original
-  energy_weight: 0.05   # Reduced from original
+  lyapunov_weight: 0.005  # Reduced from original
+  energy_weight: 0.001   # Reduced from original
 
 # Integration Configuration - specialized for stiff ODEs
 integration:
