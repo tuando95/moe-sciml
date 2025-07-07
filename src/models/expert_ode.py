@@ -34,7 +34,9 @@ class ExpertODE(nn.Module):
         input_dim = state_dim + 3
         
         # Expert-specific frequency for temporal encoding
-        self.omega = nn.Parameter(torch.tensor(1.0 * (expert_id + 1)), requires_grad=True)
+        # Initialize as float then convert to parameter to avoid device issues
+        omega_value = 1.0 * (expert_id + 1)
+        self.omega = nn.Parameter(torch.tensor(omega_value, dtype=torch.float32), requires_grad=True)
         
         # Build network layers
         layers = []
@@ -82,9 +84,10 @@ class ExpertODE(nn.Module):
             t = t.expand(x.shape[0])
         t = t.to(x.device)
         
-        # Temporal encoding
-        sin_wt = torch.sin(self.omega * t).unsqueeze(-1)
-        cos_wt = torch.cos(self.omega * t).unsqueeze(-1)
+        # Temporal encoding - ensure omega is on the same device
+        omega = self.omega.to(x.device)
+        sin_wt = torch.sin(omega * t).unsqueeze(-1)
+        cos_wt = torch.cos(omega * t).unsqueeze(-1)
         
         # Concatenate inputs
         inputs = torch.cat([x, t.unsqueeze(-1), sin_wt, cos_wt], dim=-1)

@@ -42,7 +42,8 @@ def initialize_expert_ode(
                 
         # Set omega parameter for temporal encoding
         if hasattr(expert, 'omega'):
-            expert.omega.data = torch.tensor(freq_scale)
+            # Preserve device when setting omega
+            expert.omega.data = torch.tensor(freq_scale, device=expert.omega.device, dtype=expert.omega.dtype)
             
     elif init_strategy == "stability":
         # Initialize for different stability regimes
@@ -85,7 +86,7 @@ def initialize_expert_ode(
                 
         # Set omega parameter
         if hasattr(expert, 'omega'):
-            expert.omega.data = torch.tensor(freq_scale)
+            expert.omega.data = torch.tensor(freq_scale, device=expert.omega.device, dtype=expert.omega.dtype)
 
 
 def initialize_gating_network(
