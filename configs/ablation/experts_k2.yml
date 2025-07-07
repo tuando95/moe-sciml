@@ -1,0 +1,16 @@
+# Expert count ablation: K=2 (optimal for fast/slow dynamics)
+# Inherits from base_multiscale.yml
+
+!include base_multiscale.yml
+
+# Override for 2 experts
+model:
+  n_experts: 2  # Minimal for fast/slow separation
+  expert_architecture:
+    width: 180  # Adjust width to maintain similar parameter count
+  expert_init_strategy: "timescale"  # Specific init for fast/slow
+
+# Adjust logging
+logging:
+  log_dir: "./logs_ablation/experts_k2"
+  checkpoint_dir: "./checkpoints_ablation/experts_k2"

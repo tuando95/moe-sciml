@@ -1,0 +1,19 @@
+# Temperature ablation: τ=0.1 (hard routing)
+# Inherits from base_multiscale.yml
+
+!include base_multiscale.yml
+
+# Override for hard routing
+model:
+  temperature: 0.1  # Very low temperature for hard routing
+  expert_threshold: 0.3  # Higher threshold since routing is sharper
+
+# May need adjusted regularization
+training:
+  regularization:
+    smoothness_weight: 0.05  # Higher smoothness to prevent jumping
+
+# Adjust logging
+logging:
+  log_dir: "./logs_ablation/temp_0.1"
+  checkpoint_dir: "./checkpoints_ablation/temp_0.1"

@@ -1,0 +1,111 @@
+# Base configuration for multi-scale oscillator ablation studies
+
+# Model Architecture - baseline for ablations
+model:
+  state_dim: 4  # Will be overridden dynamically based on the data
+  n_experts: 4  # Baseline number of experts
+  expert_architecture:
+    depth: 5
+    width: 128
+    activation: "tanh"
+    residual: true
+    dropout: 0.0
+  gating_architecture:
+    depth: 3
+    width: 64
+    activation: "relu"
+  history_embedding:
+    type: "lstm"
+    hidden_dim: 64
+    num_layers: 1
+  temperature: 0.3  # Baseline temperature
+  expert_threshold: 0.2
+  # Initialization settings
+  use_improved_init: true
+  expert_init_strategy: "mixed"
+  gating_init_strategy: "uniform"
+
+# Training Configuration - reduced epochs for ablation studies
+training:
+  batch_size: 4096
+  learning_rate: 3e-4
+  num_epochs: 100  # Reduced for faster ablation experiments
+  early_stopping_patience: 20
+  gradient_clip_norm: 5.0
+  sequence_length: 50
+  optimizer: "adam"
+  scheduler:
+    type: "cosine"
+    warmup_epochs: 10
+    min_lr: 1e-6
+  regularization:
+    route_weight: 0.1        # Baseline sparsity
+    expert_weight: 1e-6      # Baseline L2
+    diversity_weight: 0.0    # No diversity penalty
+    smoothness_weight: 0.01  # Baseline smoothness
+    balance_weight: 0.0      # No balance penalty
+
+# Integration Configuration
+integration:
+  method: "dopri5"
+  rtol: 1e-3
+  atol: 1e-4
+  max_step_size: 0.1
+  min_step_size: 1e-4
+  adaptive_step: false
+  routing_aware_step: false
+  dynamics_max_norm: 50.0
+
+# Data Configuration - multi-scale oscillators only
+data:
+  synthetic_systems:
+    - name: "multi_scale_oscillators"
+      enabled: true
+      n_trajectories: 10000
+      trajectory_length: 100
+      sampling_dt: 0.01
+      params:
+        freq_fast: 10.0
+        freq_slow: 0.1
+        coupling_strength: [0.1, 0.1]
+  noise:
+    observation_noise: 0.01
+    process_noise: 0.0001
+  train_val_test_split: [0.6, 0.2, 0.2]
+  temporal_sampling: "uniform"
+  augmentation:
+    random_rotation: true
+    random_scaling: true
+
+# Computational Resources
+compute:
+  device: "cuda"
+  mixed_precision: false
+  gradient_checkpointing: false
+  multi_gpu: false
+  num_workers: 2
+
+# Logging
+logging:
+  log_dir: "./logs_ablation"
+  checkpoint_dir: "./checkpoints_ablation"
+  tensorboard: true
+  wandb:
+    enabled: false
+  save_frequency: 10
+  log_frequency: 10
+
+# Evaluation
+evaluation:
+  metrics:
+    - "trajectory_mse"
+    - "computational_efficiency"
+    - "expert_specialization"
+    - "long_term_stability"
+    - "phase_space_geometry"
+    - "energy_conservation"
+    - "routing_stability"
+  visualization:
+    phase_portraits: true
+    routing_heatmaps: true
+    trajectory_decomposition: true

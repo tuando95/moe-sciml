@@ -1,0 +1,18 @@
+# Regularization ablation: All regularization disabled
+# Inherits from base_multiscale.yml
+
+!include base_multiscale.yml
+
+# Override to disable all regularization
+training:
+  regularization:
+    route_weight: 0.0        # No entropy penalty
+    expert_weight: 0.0       # No L2
+    diversity_weight: 0.0    # No diversity
+    smoothness_weight: 0.0   # No smoothness
+    balance_weight: 0.0      # No balance
+
+# Adjust logging
+logging:
+  log_dir: "./logs_ablation/reg_all_zero"
+  checkpoint_dir: "./checkpoints_ablation/reg_all_zero"

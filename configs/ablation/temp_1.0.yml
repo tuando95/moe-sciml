@@ -1,0 +1,14 @@
+# Temperature ablation: τ=1.0 (medium routing)
+# Inherits from base_multiscale.yml
+
+!include base_multiscale.yml
+
+# Override for medium routing
+model:
+  temperature: 1.0  # Medium temperature
+  expert_threshold: 0.1  # Lower threshold for softer routing
+
+# Adjust logging
+logging:
+  log_dir: "./logs_ablation/temp_1.0"
+  checkpoint_dir: "./checkpoints_ablation/temp_1.0"

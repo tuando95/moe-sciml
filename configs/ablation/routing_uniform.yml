@@ -1,0 +1,18 @@
+# Routing ablation: Uniform routing (disable gating network)
+# Inherits from base_multiscale.yml
+
+!include base_multiscale.yml
+
+# Override for uniform routing
+model:
+  gating_architecture:
+    type: "uniform"  # Special mode for uniform weights
+    depth: 1  # Minimal network
+    width: 1
+  temperature: 1.0  # Doesn't matter for uniform
+  expert_threshold: 0.0  # All experts always active
+
+# Adjust logging
+logging:
+  log_dir: "./logs_ablation/routing_uniform"
+  checkpoint_dir: "./checkpoints_ablation/routing_uniform"

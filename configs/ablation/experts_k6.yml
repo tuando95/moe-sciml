@@ -1,0 +1,21 @@
+# Expert count ablation: K=6 (over-parameterized)
+# Inherits from base_multiscale.yml
+
+!include base_multiscale.yml
+
+# Override for 6 experts
+model:
+  n_experts: 6  # More experts than necessary
+  expert_architecture:
+    width: 104  # Reduce width to maintain similar parameter count
+  
+# May need stronger regularization
+training:
+  regularization:
+    route_weight: 0.2  # Stronger sparsity to avoid redundancy
+    balance_weight: 0.1  # Some balance to ensure all experts are used
+
+# Adjust logging
+logging:
+  log_dir: "./logs_ablation/experts_k6"
+  checkpoint_dir: "./checkpoints_ablation/experts_k6"

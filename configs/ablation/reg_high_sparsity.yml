@@ -1,0 +1,22 @@
+# Regularization ablation: High sparsity penalty
+# Inherits from base_multiscale.yml
+
+!include base_multiscale.yml
+
+# Override for high sparsity
+training:
+  regularization:
+    route_weight: 1.0        # High entropy penalty for very sparse routing
+    expert_weight: 1e-6      # Keep L2
+    diversity_weight: 0.0    # Keep no diversity
+    smoothness_weight: 0.01  # Keep smoothness
+    balance_weight: 0.0      # Keep no balance
+
+# May need adjusted threshold
+model:
+  expert_threshold: 0.3  # Higher threshold to enforce sparsity
+
+# Adjust logging
+logging:
+  log_dir: "./logs_ablation/reg_high_sparsity"
+  checkpoint_dir: "./checkpoints_ablation/reg_high_sparsity"

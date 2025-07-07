@@ -1,0 +1,14 @@
+# Routing ablation: Static routing (very high temperature)
+# Inherits from base_multiscale.yml
+
+!include base_multiscale.yml
+
+# Override for static routing
+model:
+  temperature: 100.0  # Very high temperature for near-uniform routing
+  expert_threshold: 0.0  # No thresholding
+
+# Adjust logging
+logging:
+  log_dir: "./logs_ablation/routing_static"
+  checkpoint_dir: "./checkpoints_ablation/routing_static"
