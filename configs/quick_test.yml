@@ -96,11 +96,16 @@ logging:
   save_frequency: 5
   log_frequency: 10
 
-# Evaluation - minimal metrics
+# Evaluation - comprehensive metrics
 evaluation:
   metrics:
     - "trajectory_mse"
     - "computational_efficiency"
+    - "expert_specialization"
+    - "long_term_stability"
+    - "phase_space_geometry"
+    - "energy_conservation"
+    - "routing_stability"
   visualization:
     phase_portraits: true
     routing_heatmaps: false
