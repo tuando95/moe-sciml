@@ -363,8 +363,13 @@ class VanDerPolNetwork(SyntheticSystem):
         dvel = self.mu.unsqueeze(0) * (1 - pos**2) * vel - pos
         
         # Add coupling through positions
-        coupling_force = (pos.unsqueeze(1) - pos.unsqueeze(2)) @ self.coupling.T
-        dvel += coupling_force.squeeze(1)
+        # pos shape: (batch, n_oscillators)
+        # self.coupling shape: (n_oscillators, n_oscillators)
+        # Compute pairwise differences: pos_j - pos_i for all i,j
+        pos_diff = pos.unsqueeze(2) - pos.unsqueeze(1)  # (batch, n_osc, n_osc)
+        # Apply coupling matrix and sum over j
+        coupling_force = (self.coupling.unsqueeze(0) * pos_diff).sum(dim=2)  # (batch, n_osc)
+        dvel += coupling_force
         
         # Stack derivatives
         dx = torch.stack([dpos, dvel], dim=-1)
