@@ -6,9 +6,13 @@ import torch
 import numpy as np
 import random
 from pathlib import Path
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 from src.utils.config import Config
 from src.training.trainer import AMEODETrainer, create_data_loaders
+from src.evaluation.visualization import AMEODEVisualizer
 
 
 def set_seed(seed: int):
@@ -37,17 +41,21 @@ class ProgressiveAMEODETrainer(AMEODETrainer):
         }
         
         # Target regularization weights (reached at end of training)
+        # Aligned with quick_test.yml for sparse routing and energy conservation
         self.target_reg_weights = {
-            'route': 0.0001,
-            'expert': 1e-5,
-            'diversity': 0.00001,  # Very light diversity
-            'smoothness': 0.0001,
-            'balance': 0.00001    # Very light balance
+            'route': float(config.training['regularization']['route_weight']),  # 0.1 from config
+            'expert': float(config.training['regularization']['expert_weight']),  # 1e-6 from config
+            'diversity': float(config.training['regularization']['diversity_weight']),  # 0.0 from config
+            'smoothness': float(config.training['regularization']['smoothness_weight']),  # 0.01 from config
+            'balance': float(config.training['regularization']['balance_weight'])  # 0.0 from config
         }
         
         # Phase transitions
         self.warmup_epochs = 20  # Pure reconstruction
         self.rampup_epochs = 50  # Gradually introduce regularization
+        
+        # Track regularization progress for visualization
+        self.reg_weight_history = {key: [] for key in self.initial_reg_weights}
         
     def update_regularization_weights(self, epoch):
         """Progressively increase regularization weights."""
@@ -67,6 +75,9 @@ class ProgressiveAMEODETrainer(AMEODETrainer):
                 self.initial_reg_weights[key] * (1 - progress) +
                 self.target_reg_weights[key] * progress
             )
+            # Store history for visualization
+            self.reg_weight_history[key].append(current_weight)
+            
             # Update the loss function's weights directly
             if key == 'route':
                 self.loss_fn.lambda_route = current_weight
@@ -204,6 +215,87 @@ def main():
         'epoch': trainer.current_epoch,
     }, checkpoint_path)
     
+    # Create visualizations
+    print("\nGenerating visualizations...")
+    viz_dir = Path(config.logging['log_dir']) / 'progressive_training_viz'
+    viz_dir.mkdir(parents=True, exist_ok=True)
+    visualizer = AMEODEVisualizer(save_dir=viz_dir)
+    
+    # 1. Plot regularization weight progression
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    axes = axes.flatten()
+    
+    epochs = np.arange(len(trainer.reg_weight_history['route']))
+    
+    for i, (key, history) in enumerate(trainer.reg_weight_history.items()):
+        if i < 6:  # We have 5 regularization terms
+            axes[i].plot(epochs, history, linewidth=2)
+            axes[i].axvline(trainer.warmup_epochs, color='red', linestyle='--', alpha=0.5, label='End Warmup')
+            axes[i].axvline(trainer.warmup_epochs + trainer.rampup_epochs, color='green', linestyle='--', alpha=0.5, label='End Rampup')
+            axes[i].set_xlabel('Epoch')
+            axes[i].set_ylabel('Weight')
+            axes[i].set_title(f'{key.capitalize()} Weight Progression')
+            axes[i].grid(True, alpha=0.3)
+            if i == 0:
+                axes[i].legend()
+    
+    # Hide unused subplot
+    if len(trainer.reg_weight_history) < 6:
+        axes[-1].set_visible(False)
+    
+    plt.suptitle('Progressive Regularization Schedule')
+    plt.tight_layout()
+    plt.savefig(viz_dir / 'regularization_progression.png', dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    # 2. Plot training curves if available
+    if hasattr(trainer, 'metrics_history') and trainer.metrics_history:
+        visualizer.plot_loss_landscape(trainer.metrics_history, save_name='training_curves')
+    
+    # 3. Generate phase portraits for final model
+    print("Generating phase portraits...")
+    visualizer.plot_phase_portraits(trainer.model, save_name='final_mixture_phase_portrait')
+    
+    # Plot individual expert phase portraits
+    for i in range(trainer.model.n_experts):
+        visualizer.plot_phase_portraits(trainer.model, expert_idx=i, 
+                                      save_name=f'expert_{i}_phase_portrait')
+    
+    # 4. Generate routing heatmap
+    print("Generating routing heatmap...")
+    visualizer.plot_routing_heatmap(trainer.model, save_name='routing_heatmap')
+    
+    # 5. Test trajectory visualization
+    print("Generating test trajectory comparisons...")
+    # Get a sample from test set
+    test_batch = next(iter(test_loader))
+    trajectory = test_batch['trajectory'].to(trainer.device)
+    times = test_batch['times'].to(trainer.device)
+    x0 = test_batch['initial_condition'].to(trainer.device)
+    
+    if times.dim() > 1:
+        times = times[0]
+    
+    with torch.no_grad():
+        pred_traj, info = trainer.model(x0, times)
+        
+    # Plot trajectory comparison
+    visualizer.plot_trajectory_comparison(
+        trajectory[:, :5],  # First 5 trajectories
+        pred_traj[:, :5],
+        times,
+        save_name='test_trajectories'
+    )
+    
+    # Plot expert usage evolution if available
+    if 'routing_weights' in info and info['routing_weights'].numel() > 0:
+        visualizer.plot_expert_usage_evolution(
+            info['routing_weights'][:, :5],  # First 5 trajectories
+            times,
+            save_name='expert_usage'
+        )
+    
+    print(f"\nVisualizations saved to: {viz_dir}")
     print("\nTraining completed!")
 
 

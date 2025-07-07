@@ -58,6 +58,11 @@ class BaselineTrainer:
             'val_loss': [],
         }
         
+        # Early stopping
+        self.early_stopping_patience = config.training.get('early_stopping_patience', 20)
+        self.early_stopping_counter = 0
+        self.early_stopped = False
+        
     def train_epoch(self, train_loader):
         """Train for one epoch."""
         self.model.train()
@@ -215,12 +220,26 @@ class BaselineTrainer:
                   f"Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, "
                   f"LR: {self.optimizer.param_groups[0]['lr']:.2e}")
             
-            # Save best model
+            # Save best model and check early stopping
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
                 self.save_checkpoint(epoch)
+                self.early_stopping_counter = 0
+            else:
+                self.early_stopping_counter += 1
+                
+            # Check early stopping
+            if self.early_stopping_counter >= self.early_stopping_patience:
+                print(f"\nEarly stopping triggered at epoch {epoch+1}")
+                self.early_stopped = True
+                break
         
-        print(f"\nBest validation loss: {self.best_val_loss:.4f}")
+        if self.early_stopped:
+            print(f"\nTraining stopped early at epoch {epoch+1}")
+        else:
+            print(f"\nCompleted all {num_epochs} epochs")
+            
+        print(f"Best validation loss: {self.best_val_loss:.4f}")
         return self.metrics_history
     
     def save_checkpoint(self, epoch):

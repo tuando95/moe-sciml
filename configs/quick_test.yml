@@ -30,7 +30,7 @@ training:
   batch_size: 4096  # Larger batch for stability
   learning_rate: 3e-4  # Optimal learning rate
   num_epochs: 200  # Very short
-  early_stopping_patience: 50
+  early_stopping_patience: 35
   gradient_clip_norm: 5.0  # Less restrictive clipping
   sequence_length: 50
   optimizer: "adam"
