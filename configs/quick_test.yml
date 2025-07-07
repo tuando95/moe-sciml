@@ -12,11 +12,11 @@ model:
     dropout: 0.0
   gating_architecture:
     depth: 3  # Deeper gating for better routing
-    width: 32  # Wider gating
+    width: 64  # Wider gating
     activation: "relu"
   history_embedding:
     type: "lstm"
-    hidden_dim: 32  # Larger history
+    hidden_dim: 64  # Larger history
     num_layers: 1
   temperature: 0.3  # Lower temperature for sharper routing (fewer active experts)
   expert_threshold: 0.2  # Higher threshold to force sparser routing
@@ -30,7 +30,7 @@ training:
   batch_size: 4096  # Larger batch for stability
   learning_rate: 3e-4  # Optimal learning rate
   num_epochs: 200  # Very short
-  early_stopping_patience: 15
+  early_stopping_patience: 50
   gradient_clip_norm: 5.0  # Less restrictive clipping
   sequence_length: 50
   optimizer: "adam"

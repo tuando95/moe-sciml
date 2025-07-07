@@ -6,7 +6,7 @@ model:
   expert_architecture:
     depth: 3  # Shallower for efficiency
     width: 512  # Wider networks
-    activation: "swish"
+    activation: "tanh"  # Better for continuous dynamics (from quick_test)
     residual: true
     dropout: 0.0
   gating_architecture:
@@ -17,28 +17,32 @@ model:
     type: "lstm"
     hidden_dim: 128
     num_layers: 1
-  temperature: 1.0
-  expert_threshold: 0.1  # Higher threshold for sparsity
+  temperature: 0.3  # Lower temperature for sharper routing (from quick_test)
+  expert_threshold: 0.2  # Higher threshold to force ~2 active experts
+  # Initialization settings (from quick_test)
+  use_improved_init: true
+  expert_init_strategy: "mixed"
+  gating_init_strategy: "uniform"
 
 # Training Configuration - optimized for large systems
 training:
-  batch_size: 16  # Smaller batch for memory
-  learning_rate: 1e-3
+  batch_size: 256  # Larger batch for stability (balanced with memory)
+  learning_rate: 3e-4  # Optimal learning rate from quick_test
   num_epochs: 150
   early_stopping_patience: 20
-  gradient_clip_norm: 1.0
+  gradient_clip_norm: 5.0  # Less restrictive (from quick_test)
   sequence_length: 100
   optimizer: "adam"
   scheduler:
-    type: "step"
-    step_size: 50
-    gamma: 0.5
+    type: "cosine"  # Better than step (from quick_test)
+    warmup_epochs: 10
+    min_lr: 1e-6
   regularization:
-    route_weight: 0.5  # Encourage sparse routing
-    expert_weight: 1e-4
-    diversity_weight: 1.0
-    smoothness_weight: 0.1
-    balance_weight: 0.5
+    route_weight: 0.1  # Moderate routing penalty (from quick_test)
+    expert_weight: 1e-6  # Very light L2 (from quick_test)
+    diversity_weight: 0.0  # No diversity penalty - let experts specialize
+    smoothness_weight: 0.01  # Small smoothness penalty for energy
+    balance_weight: 0.0  # Natural specialization
 
 # Integration Configuration
 integration:
