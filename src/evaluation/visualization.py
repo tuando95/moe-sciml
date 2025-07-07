@@ -180,6 +180,13 @@ class AMEODEVisualizer:
         pred_traj = pred_trajectory.cpu().numpy()
         times_np = times.cpu().numpy()
         
+        # Handle different tensor shapes
+        # Expected shape: (time, batch, dim) or (batch, time, dim)
+        if true_traj.shape[0] != len(times_np):
+            # Assume shape is (batch, time, dim), need to transpose
+            true_traj = true_traj.transpose(1, 0, 2)
+            pred_traj = pred_traj.transpose(1, 0, 2)
+        
         # Select dimensions to plot
         if dims_to_plot is None:
             dims_to_plot = list(range(min(3, true_traj.shape[-1])))

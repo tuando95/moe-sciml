@@ -54,10 +54,20 @@ def run_single_experiment(config_path: Path, gpu_id: int = 0) -> Dict[str, Any]:
     print(f"\nRunning experiment: {exp_name} on GPU {gpu_id}")
     start_time = time.time()
     
+    # Get system name from config
+    config = load_config_with_includes(config_path)
+    system_name = 'multi_scale_oscillators'  # Default
+    if 'data' in config and 'synthetic_systems' in config['data']:
+        for sys_config in config['data']['synthetic_systems']:
+            if sys_config.get('enabled', False):
+                system_name = sys_config['name']
+                break
+    
     cmd = [
-        'python', 'train_ame_ode.py',
+        'python', 'train_progressive.py',
         '--config', str(config_path),
-        '--experiment-name', f'ablation_{exp_name}'
+        '--system', system_name,
+        '--device', 'cuda'
     ]
     
     try:
@@ -100,29 +110,58 @@ def parse_training_output(output: str) -> Dict[str, float]:
     
     # Look for final test metrics in the output
     lines = output.split('\n')
-    in_test_section = False
     
     for line in lines:
-        if 'Test Metrics:' in line:
-            in_test_section = True
-            continue
+        # Look for test reconstruction loss
+        if 'Test Reconstruction Loss:' in line:
+            try:
+                # Format: "Test Reconstruction Loss: 0.123456 ± 0.001234"
+                parts = line.split(':')[1].strip().split('±')
+                metrics['trajectory_mse'] = float(parts[0].strip())
+                if len(parts) > 1:
+                    metrics['test_mse_std'] = float(parts[1].strip())
+            except:
+                pass
         
-        if in_test_section:
-            if ':' in line:
-                parts = line.strip().split(':')
-                if len(parts) == 2:
-                    metric_name = parts[0].strip()
-                    try:
-                        metric_value = float(parts[1].strip())
-                        metrics[metric_name] = metric_value
-                    except ValueError:
-                        pass
+        # Look for best validation reconstruction
+        if 'Val Recon:' in line and '(best:' in line:
+            try:
+                # Format: "Val Recon: 0.1234 (best: 0.1234)"
+                val_part = line.split('Val Recon:')[1].split('(best:')[0]
+                metrics['val_reconstruction'] = float(val_part.strip())
+            except:
+                pass
+        
+        # Look for routing entropy
+        if 'Routing Entropy:' in line:
+            try:
+                metrics['routing_entropy'] = float(line.split(':')[1].strip())
+            except:
+                pass
+        
+        # Look for expert usage variance
+        if 'Expert Usage Var:' in line:
+            try:
+                metrics['expert_usage_var'] = float(line.split(':')[1].strip())
+            except:
+                pass
+        
+        # Look for number of active experts
+        if 'Active experts' in line:
+            try:
+                # Extract from training output if available
+                parts = line.split()
+                for i, part in enumerate(parts):
+                    if part == 'experts:' and i + 1 < len(parts):
+                        metrics['mean_active_experts'] = float(parts[i + 1])
+            except:
+                pass
     
     # Also extract best validation loss if available
     for line in lines:
-        if 'Best validation loss:' in line:
+        if 'Best validation reconstruction loss:' in line:
             try:
-                metrics['best_val_loss'] = float(line.split(':')[1].strip())
+                metrics['best_val_reconstruction'] = float(line.split(':')[1].strip())
             except:
                 pass
     
