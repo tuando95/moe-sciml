@@ -156,7 +156,12 @@ class AMEODEMetrics:
             pred_final_sep = torch.norm(pred[-1, idx1] - pred[-1, idx2])
             
             # Lyapunov exponent estimates
-            dt_total = times[-1] - times[0]
+            # Handle both 1D and 2D times tensors
+            if times.dim() > 1:
+                dt_total = times[0, -1] - times[0, 0]  # Use first batch
+            else:
+                dt_total = times[-1] - times[0]
+            
             true_lyapunov = torch.log(true_final_sep / initial_sep) / dt_total
             pred_lyapunov = torch.log(pred_final_sep / initial_sep) / dt_total
             
