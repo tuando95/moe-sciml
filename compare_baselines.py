@@ -7,6 +7,36 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
+import os
+
+
+def train_single_baseline(args):
+    """Train a single baseline on specified GPU."""
+    baseline, config, system, gpu_id = args
+    env = os.environ.copy()
+    env['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+    
+    cmd = [
+        'python', 'train_baseline.py',
+        '--config', config,
+        '--baseline', baseline,
+        '--system', system
+    ]
+    
+    print(f"Starting {baseline} on GPU {gpu_id}...")
+    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        raise Exception(f"Training failed: {result.stderr}")
+    
+    # Find and load results
+    results_dir = Path('results') / 'baselines'
+    baseline_files = list(results_dir.glob(f"{baseline}_{system}_*.json"))
+    if baseline_files:
+        latest_file = max(baseline_files, key=lambda p: p.stat().st_mtime)
+        with open(latest_file) as f:
+            return baseline, json.load(f)
+    return baseline, None
 
 
 def train_all_baselines(config='configs/quick_test.yml', system='multi_scale_oscillators', 
@@ -18,46 +48,21 @@ def train_all_baselines(config='configs/quick_test.yml', system='multi_scale_osc
     if parallel and n_gpus > 0:
         # Parallel training using multiprocessing
         from concurrent.futures import ProcessPoolExecutor, as_completed
-        import os
         
         print(f"\nTraining {len(baselines)} baselines in parallel using {n_gpus} GPU(s)")
         print('='*60)
         
-        def train_single_baseline(baseline, gpu_id):
-            """Train a single baseline on specified GPU."""
-            env = os.environ.copy()
-            env['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-            
-            cmd = [
-                'python', 'train_baseline.py',
-                '--config', config,
-                '--baseline', baseline,
-                '--system', system
-            ]
-            
-            print(f"Starting {baseline} on GPU {gpu_id}...")
-            result = subprocess.run(cmd, env=env, capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                raise Exception(f"Training failed: {result.stderr}")
-            
-            # Find and load results
-            results_dir = Path('results') / 'baselines'
-            baseline_files = list(results_dir.glob(f"{baseline}_{system}_*.json"))
-            if baseline_files:
-                latest_file = max(baseline_files, key=lambda p: p.stat().st_mtime)
-                with open(latest_file) as f:
-                    return baseline, json.load(f)
-            return baseline, None
+        # Prepare arguments for parallel execution
+        training_args = []
+        for i, baseline in enumerate(baselines):
+            gpu_id = i % n_gpus
+            training_args.append((baseline, config, system, gpu_id))
         
         # Distribute baselines across GPUs
         max_workers = min(len(baselines), n_gpus)
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = {}
-            for i, baseline in enumerate(baselines):
-                gpu_id = i % n_gpus
-                future = executor.submit(train_single_baseline, baseline, gpu_id)
-                futures[future] = baseline
+            futures = {executor.submit(train_single_baseline, args): args[0] 
+                      for args in training_args}
             
             # Collect results as they complete
             for future in as_completed(futures):
