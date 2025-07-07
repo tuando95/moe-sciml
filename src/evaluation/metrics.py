@@ -35,7 +35,7 @@ class AMEODEMetrics:
             metrics.update(efficiency_metrics)
         
         # Expert specialization
-        if 'expert_specialization' in self.metrics_to_compute and ground_truth_experts is not None:
+        if 'expert_specialization' in self.metrics_to_compute and ground_truth_experts is not None and 'routing_weights' in model_info:
             metrics['expert_specialization_mi'] = self.expert_specialization(
                 model_info['routing_weights'], ground_truth_experts
             )
@@ -59,7 +59,7 @@ class AMEODEMetrics:
             )
         
         # Routing stability
-        if 'routing_stability' in self.metrics_to_compute:
+        if 'routing_stability' in self.metrics_to_compute and 'routing_weights' in model_info:
             metrics['routing_entropy_rate'] = self.routing_stability(
                 model_info['routing_weights']
             )
