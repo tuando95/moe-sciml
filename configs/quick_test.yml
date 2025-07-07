@@ -18,8 +18,8 @@ model:
     type: "lstm"
     hidden_dim: 32  # Larger history
     num_layers: 1
-  temperature: 0.7  # Balanced temperature
-  expert_threshold: 0.01
+  temperature: 0.3  # Lower temperature for sharper routing (fewer active experts)
+  expert_threshold: 0.2  # Higher threshold to force sparser routing
   # Initialization settings
   use_improved_init: true
   expert_init_strategy: "mixed"  # Better for diverse experts
@@ -27,10 +27,10 @@ model:
 
 # Training Configuration - minimal epochs
 training:
-  batch_size: 256  # Larger batch for stability
+  batch_size: 4096  # Larger batch for stability
   learning_rate: 3e-4  # Optimal learning rate
   num_epochs: 200  # Very short
-  early_stopping_patience: 35
+  early_stopping_patience: 15
   gradient_clip_norm: 5.0  # Less restrictive clipping
   sequence_length: 50
   optimizer: "adam"
@@ -39,10 +39,10 @@ training:
     warmup_epochs: 10  # Longer warmup
     min_lr: 1e-6
   regularization:
-    route_weight: 0.0        # No routing penalty initially
+    route_weight: 0.1        # Add entropy penalty to encourage sparse routing
     expert_weight: 1e-6      # Very light L2 regularization
     diversity_weight: 0.0    # No diversity penalty - let experts specialize
-    smoothness_weight: 0.0  # No smoothness penalty
+    smoothness_weight: 0.01  # Small smoothness penalty to reduce energy drift
     balance_weight: 0.0      # No balance penalty - natural specialization
 
 # Integration Configuration - fast settings
@@ -62,7 +62,7 @@ data:
   synthetic_systems:
     - name: "multi_scale_oscillators"
       enabled: true
-      n_trajectories: 2000  # More data
+      n_trajectories: 10000  # More data
       trajectory_length: 100  # Longer trajectories
       sampling_dt: 0.01  # Finer sampling
       params:

@@ -9,35 +9,95 @@ import numpy as np
 from datetime import datetime
 
 
-def train_all_baselines(config='configs/quick_test.yml', system='multi_scale_oscillators'):
+def train_all_baselines(config='configs/quick_test.yml', system='multi_scale_oscillators', 
+                       parallel=False, n_gpus=1):
     """Train all baseline models."""
     baselines = ['single', 'multiscale', 'augmented', 'ensemble', 'moe']
     results = {}
     
-    for baseline in baselines:
-        print(f"\n{'='*60}")
-        print(f"Training {baseline} baseline")
+    if parallel and n_gpus > 0:
+        # Parallel training using multiprocessing
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        import os
+        
+        print(f"\nTraining {len(baselines)} baselines in parallel using {n_gpus} GPU(s)")
         print('='*60)
         
-        cmd = [
-            'python', 'train_baseline.py',
-            '--config', config,
-            '--baseline', baseline,
-            '--system', system
-        ]
-        
-        try:
-            subprocess.run(cmd, check=True)
+        def train_single_baseline(baseline, gpu_id):
+            """Train a single baseline on specified GPU."""
+            env = os.environ.copy()
+            env['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
             
-            # Find the latest results file
+            cmd = [
+                'python', 'train_baseline.py',
+                '--config', config,
+                '--baseline', baseline,
+                '--system', system
+            ]
+            
+            print(f"Starting {baseline} on GPU {gpu_id}...")
+            result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                raise Exception(f"Training failed: {result.stderr}")
+            
+            # Find and load results
             results_dir = Path('results') / 'baselines'
             baseline_files = list(results_dir.glob(f"{baseline}_{system}_*.json"))
             if baseline_files:
                 latest_file = max(baseline_files, key=lambda p: p.stat().st_mtime)
                 with open(latest_file) as f:
-                    results[baseline] = json.load(f)
-        except subprocess.CalledProcessError as e:
-            print(f"Error training {baseline}: {e}")
+                    return baseline, json.load(f)
+            return baseline, None
+        
+        # Distribute baselines across GPUs
+        max_workers = min(len(baselines), n_gpus)
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = {}
+            for i, baseline in enumerate(baselines):
+                gpu_id = i % n_gpus
+                future = executor.submit(train_single_baseline, baseline, gpu_id)
+                futures[future] = baseline
+            
+            # Collect results as they complete
+            for future in as_completed(futures):
+                baseline = futures[future]
+                try:
+                    baseline_name, result = future.result()
+                    if result:
+                        results[baseline_name] = result
+                        print(f"✓ Completed: {baseline_name}")
+                    else:
+                        print(f"✗ No results for: {baseline_name}")
+                except Exception as e:
+                    print(f"✗ Error training {baseline}: {e}")
+    
+    else:
+        # Sequential training
+        for baseline in baselines:
+            print(f"\n{'='*60}")
+            print(f"Training {baseline} baseline")
+            print('='*60)
+            
+            cmd = [
+                'python', 'train_baseline.py',
+                '--config', config,
+                '--baseline', baseline,
+                '--system', system
+            ]
+            
+            try:
+                subprocess.run(cmd, check=True)
+                
+                # Find the latest results file
+                results_dir = Path('results') / 'baselines'
+                baseline_files = list(results_dir.glob(f"{baseline}_{system}_*.json"))
+                if baseline_files:
+                    latest_file = max(baseline_files, key=lambda p: p.stat().st_mtime)
+                    with open(latest_file) as f:
+                        results[baseline] = json.load(f)
+            except subprocess.CalledProcessError as e:
+                print(f"Error training {baseline}: {e}")
     
     return results
 
@@ -443,12 +503,17 @@ def main():
                         help='Directory containing model checkpoints')
     parser.add_argument('--fast-inference', action='store_true',
                         help='Use fast inference mode for AME-ODE evaluation')
+    parser.add_argument('--parallel', action='store_true',
+                        help='Train models in parallel using multiple processes')
+    parser.add_argument('--n-gpus', type=int, default=1,
+                        help='Number of GPUs to use for parallel training')
     
     args = parser.parse_args()
     
     if args.train:
         # Train all baselines
-        results = train_all_baselines(args.config, args.system)
+        results = train_all_baselines(args.config, args.system, 
+                                    parallel=args.parallel, n_gpus=args.n_gpus)
     elif args.use_checkpoints:
         # Evaluate from saved checkpoints
         results = evaluate_from_checkpoints(args.config, args.checkpoint_dir, args.system, 
