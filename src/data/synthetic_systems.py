@@ -119,21 +119,39 @@ class SyntheticSystem(ABC):
         trajectories = torch.zeros(n_steps, n_traj, state_dim, device=x0.device)
         trajectories[0] = x0
         
-        # Euler-Maruyama integration
+        # Euler-Maruyama integration with stability checks
         for i in tqdm(range(1, n_steps), desc="SDE integration", leave=False):
             dt = t_span[i] - t_span[i-1]
             t = t_span[i-1]
             x = trajectories[i-1]
             
+            # Check for NaN/Inf before dynamics computation
+            if torch.isnan(x).any() or torch.isinf(x).any():
+                print(f"Warning: NaN/Inf detected at step {i-1}, clamping values")
+                x = torch.nan_to_num(x, nan=0.0, posinf=10.0, neginf=-10.0)
+                trajectories[i-1] = x
+            
             # Deterministic part
             dx_det = self.dynamics(t, x) * dt
+            
+            # Clamp deterministic dynamics to prevent explosion
+            dx_det_norm = torch.norm(dx_det, dim=-1, keepdim=True)
+            max_step = 10.0 * dt  # Maximum step size relative to dt
+            dx_det = torch.where(
+                dx_det_norm > max_step,
+                dx_det * max_step / (dx_det_norm + 1e-8),
+                dx_det
+            )
             
             # Stochastic part (Brownian motion)
             dW = torch.randn_like(x) * torch.sqrt(dt)
             dx_stoch = process_noise_std * dW
             
-            # Update state
+            # Update state with clamping
             trajectories[i] = x + dx_det + dx_stoch
+            
+            # Clamp final values to prevent explosion
+            trajectories[i] = torch.clamp(trajectories[i], min=-100.0, max=100.0)
         
         return trajectories
     
