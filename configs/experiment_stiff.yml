@@ -1,94 +1,114 @@
 # Configuration for stiff dynamics experiments
+# Adapted from quick_test.yml with specialized settings for stiff systems
 
-# Model Architecture - specialized for stiff systems
+# Model Architecture - optimized for stiff/non-stiff dynamics
 model:
-  n_experts: 4
+  state_dim: 8  # Will be overridden based on n_oscillators
+  n_experts: 4  # Different stiffness regimes
   expert_architecture:
-    depth: 6  # Deeper for complex stiff dynamics
-    width: 128
-    activation: "elu"  # Smooth activation
+    depth: 5  # Moderate depth (quick_test style)
+    width: 128  # Same as quick_test
+    activation: "tanh"  # Smooth activation for stiff systems
     residual: true
-    dropout: 0.2  # Higher dropout for regularization
+    dropout: 0.0  # No dropout for stability
   gating_architecture:
-    depth: 3
-    width: 64
-    activation: "tanh"
+    depth: 3  # Same as quick_test
+    width: 64  # Same as quick_test
+    activation: "relu"
   history_embedding:
     type: "lstm"
-    hidden_dim: 48
-    num_layers: 2
-  temperature: 0.3  # Very sharp routing for stiff/non-stiff
-  expert_threshold: 0.01
+    hidden_dim: 64  # Same as quick_test
+    num_layers: 2  # Simpler than original
+  temperature: 0.3  # Sharp routing for stiff/non-stiff separation
+  expert_threshold: 0.2  # Higher threshold for sparse routing
+  # Initialization settings
+  use_improved_init: true
+  expert_init_strategy: "mixed"  # Diverse experts for different stiffness
+  gating_init_strategy: "uniform"
 
-# Training Configuration - careful training for stiff systems
+# Training Configuration - balanced for stiff systems
 training:
-  batch_size: 32
-  learning_rate: 1e-4  # Lower learning rate
+  batch_size: 2048  # Larger than original but manageable for stiff
+  learning_rate: 3e-4  # Same as quick_test
   num_epochs: 250
   early_stopping_patience: 40
-  gradient_clip_norm: 0.1  # Aggressive clipping
-  sequence_length: 80
-  optimizer: "adamw"
+  gradient_clip_norm: 1.0  # More aggressive than quick_test but less than original
+  sequence_length: 100
+  optimizer: "adam"  # Simpler than adamw
   scheduler:
     type: "cosine"
-    warmup_epochs: 50  # Longer warmup
-    min_lr: 1e-7
+    warmup_epochs: 20  # Moderate warmup
+    min_lr: 1e-6
   regularization:
-    route_weight: 0.01  # Minimal routing regularization
-    expert_weight: 1e-3  # Higher weight decay
-    diversity_weight: 3.0  # Strong diversity
-    smoothness_weight: 0.01  # Allow sharp transitions
-    balance_weight: 0.1
-  # Stability-aware training
+    route_weight: 0.1        # Encourage sparse routing
+    expert_weight: 1e-6      # Minimal L2
+    diversity_weight: 0.0    # No diversity - let experts specialize on stiffness
+    smoothness_weight: 0.005 # Very small - allow transitions between stiff/non-stiff
+    balance_weight: 0.0      # Natural specialization
+  # Stability-aware training (keep for stiff systems)
   use_stability_loss: true
-  lyapunov_weight: 0.5
-  energy_weight: 0.1
+  lyapunov_weight: 0.1  # Reduced from original
+  energy_weight: 0.05   # Reduced from original
 
 # Integration Configuration - specialized for stiff ODEs
 integration:
   method: "dopri5"  # Adaptive method crucial
-  rtol: 1e-7
-  atol: 1e-9
-  max_step_size: 0.01  # Small max step
-  min_step_size: 1e-8
-  adaptive_step: true
+  rtol: 1e-5  # Relaxed from original but still tight
+  atol: 1e-7  # Relaxed from original
+  max_step_size: 0.05  # Slightly larger than original
+  min_step_size: 1e-7
+  adaptive_step: true  # Critical for stiff systems
   routing_aware_step: true
   adjoint: false  # Avoid for stability
+  # Stability control
+  dynamics_max_norm: 50.0  # Same as quick_test
 
 # Data Configuration - stiff test systems
 data:
   synthetic_systems:
     - name: "van_der_pol_network"
       enabled: true
-      n_trajectories: 6000
-      trajectory_length: 150
-      sampling_dt: 0.002  # Fine sampling
+      n_trajectories: 10000  # More data
+      trajectory_length: 100
+      sampling_dt: 0.005  # Less fine than original
       params:
         n_oscillators: [4, 6]
-        mu_range: [0.1, 5.0]  # Wide range for stiffness
+        mu_range: [0.1, 5.0]  # Wide range for stiffness variation
   noise:
-    observation_noise: 0.001  # Low noise
-    process_noise: 0.0001
-  temporal_sampling: "adaptive"  # Critical for stiff systems
+    observation_noise: 0.01  # Same as quick_test
+    process_noise: 0.0001   # Same as quick_test
+  train_val_test_split: [0.6, 0.2, 0.2]
+  temporal_sampling: "adaptive"  # Keep adaptive for stiff regions
   augmentation:
-    random_rotation: false
-    random_scaling: false
-    noise_injection: false  # No augmentation for stiff
+    random_rotation: false  # Preserve stiff structure
+    random_scaling: true    # Allow some variation
 
 # Computational Resources
 compute:
   device: "cuda"
   mixed_precision: false  # Disable for numerical precision
-  gradient_checkpointing: true
+  gradient_checkpointing: false  # Simpler
   multi_gpu: false
-  num_workers: 4
+  num_workers: 2
 
-# Evaluation - focus on stability
+# Logging
+logging:
+  log_dir: "./logs_stiff"
+  checkpoint_dir: "./checkpoints_stiff"
+  tensorboard: true
+  wandb:
+    enabled: false
+  save_frequency: 10
+  log_frequency: 10
+
+# Evaluation - focus on stability and efficiency
 evaluation:
   metrics:
     - "trajectory_mse"
     - "computational_efficiency"
-    - "long_term_stability"
+    - "expert_specialization"
+    - "long_term_stability"  # Critical for stiff
+    - "phase_space_geometry"
     - "energy_conservation"
     - "routing_stability"
   visualization:

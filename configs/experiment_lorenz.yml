@@ -28,7 +28,7 @@ model:
 
 # Training Configuration - adapted for Lorenz dynamics
 training:
-  batch_size: 3072  # Larger batch than original but smaller than quick_test
+  batch_size: 2048  # Larger batch than original but smaller than quick_test
   learning_rate: 3e-4  # Same as quick_test
   num_epochs: 250  # Moderate training time
   early_stopping_patience: 35
