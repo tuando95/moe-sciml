@@ -27,7 +27,7 @@ model:
 
 # Training Configuration - minimal epochs
 training:
-  batch_size: 4096  # Larger batch for stability
+  batch_size: 3072  # Larger batch for stability
   learning_rate: 3e-4  # Optimal learning rate
   num_epochs: 200  # Very short
   early_stopping_patience: 35

@@ -401,6 +401,415 @@ class VanDerPolNetwork(SyntheticSystem):
         return expert_assignment
 
 
+class FitzHughNagumo(SyntheticSystem):
+    """FitzHugh-Nagumo model of neural excitability with spatial coupling."""
+    
+    def _get_state_dim(self) -> int:
+        return self.n_neurons * 2  # voltage + recovery for each neuron
+    
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        
+        params = config.get('params', {})
+        self.n_neurons = params.get('n_neurons', 10)
+        self.a = params.get('a', 0.7)  # Recovery timescale
+        self.b = params.get('b', 0.8)  # Recovery coupling
+        self.I_ext_range = params.get('I_ext', [0.0, 0.5])  # External current
+        
+        # Heterogeneous parameters for each neuron
+        self.I_ext = torch.linspace(*self.I_ext_range, self.n_neurons).to(self.device)
+        
+        # Coupling matrix (nearest neighbor + some long-range)
+        self.coupling = self._create_coupling_matrix()
+        
+    def _create_coupling_matrix(self):
+        """Create heterogeneous coupling matrix."""
+        W = torch.zeros(self.n_neurons, self.n_neurons)
+        # Nearest neighbor coupling
+        for i in range(self.n_neurons - 1):
+            W[i, i+1] = W[i+1, i] = 0.1
+        # Add some long-range connections
+        W[0, -1] = W[-1, 0] = 0.05  # Ring topology
+        return W.to(self.device)
+    
+    def dynamics(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        """FitzHugh-Nagumo dynamics with 3 regimes: resting, spiking, bursting."""
+        batch_size = x.shape[0]
+        x_reshaped = x.view(batch_size, self.n_neurons, 2)
+        
+        v = x_reshaped[..., 0]  # Voltage
+        w = x_reshaped[..., 1]  # Recovery variable
+        
+        # Voltage dynamics: dv/dt = v - v³/3 - w + I_ext + coupling
+        dv = v - v**3 / 3 - w + self.I_ext.unsqueeze(0)
+        
+        # Add diffusive coupling
+        coupling_term = (v.unsqueeze(1) - v.unsqueeze(2)) @ self.coupling.T
+        dv += coupling_term.squeeze(1)
+        
+        # Recovery dynamics: dw/dt = (v + a - b*w) / τ
+        # τ varies with activity level creating multiple timescales
+        tau = 12.5 + 5.0 * torch.sigmoid(v)  # Activity-dependent timescale
+        dw = (v + self.a - self.b * w) / tau
+        
+        dx = torch.stack([dv, dw], dim=-1)
+        return dx.view(batch_size, -1)
+    
+    def sample_initial_conditions(self, n_samples: int) -> torch.Tensor:
+        """Sample from different activity states."""
+        # Mix of resting, spiking, and intermediate states
+        v = torch.randn(n_samples, self.n_neurons, device=self.device) * 0.5
+        w = torch.randn(n_samples, self.n_neurons, device=self.device) * 0.1
+        
+        # Some neurons start in excited state
+        excited_neurons = torch.rand(n_samples, self.n_neurons, device=self.device) < 0.2
+        v[excited_neurons] = 1.5
+        
+        x0 = torch.stack([v, w], dim=-1)
+        return x0.view(n_samples, -1)
+    
+    def get_ground_truth_expert_assignment(self, x: torch.Tensor, dx_dt: torch.Tensor) -> torch.Tensor:
+        """Assign based on neural activity regime."""
+        x_reshaped = x.view(x.shape[0], self.n_neurons, 2)
+        v = x_reshaped[..., 0]
+        
+        # Average activity level
+        avg_v = torch.mean(v, dim=-1)
+        max_v = torch.max(torch.abs(v), dim=-1)[0]
+        
+        # Expert 0: Resting state (low activity)
+        # Expert 1: Spiking (high activity, regular)
+        # Expert 2: Bursting/chaotic (very high activity)
+        expert_assignment = torch.zeros(x.shape[0], dtype=torch.long, device=x.device)
+        expert_assignment[max_v < 0.5] = 0  # Resting
+        expert_assignment[(max_v >= 0.5) & (max_v < 1.5)] = 1  # Spiking
+        expert_assignment[max_v >= 1.5] = 2  # Bursting
+        
+        return expert_assignment
+
+
+class PredatorPreyMigration(SyntheticSystem):
+    """Spatial predator-prey dynamics with seasonal migration."""
+    
+    def _get_state_dim(self) -> int:
+        return self.n_patches * 2  # prey + predator in each patch
+    
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        
+        params = config.get('params', {})
+        self.n_patches = params.get('n_patches', 5)
+        
+        # Heterogeneous carrying capacities (environmental gradient)
+        self.K = torch.linspace(0.5, 2.0, self.n_patches).to(self.device)
+        
+        # Growth and interaction parameters
+        self.r = params.get('growth_rate', 1.0)  # Prey growth
+        self.a = params.get('predation_rate', 1.2)  # Predation
+        self.e = params.get('conversion_efficiency', 0.6)
+        self.d = params.get('predator_death', 0.5)
+        
+        # Migration rates (seasonal)
+        self.m_prey = params.get('prey_migration', 0.1)
+        self.m_pred = params.get('predator_migration', 0.05)
+        
+        # Migration connectivity (1D chain with periodic boundary)
+        self.migration_matrix = self._create_migration_matrix()
+        
+    def _create_migration_matrix(self):
+        """Create migration connectivity matrix."""
+        M = torch.zeros(self.n_patches, self.n_patches)
+        for i in range(self.n_patches):
+            M[i, (i-1) % self.n_patches] = 1.0
+            M[i, (i+1) % self.n_patches] = 1.0
+            M[i, i] = -2.0
+        return M.to(self.device)
+    
+    def dynamics(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        """Predator-prey dynamics with migration."""
+        batch_size = x.shape[0]
+        x_reshaped = x.view(batch_size, self.n_patches, 2)
+        
+        N = x_reshaped[..., 0]  # Prey density
+        P = x_reshaped[..., 1]  # Predator density
+        
+        # Ensure t is properly shaped for broadcasting
+        if t.dim() == 0:
+            t = t.unsqueeze(0)
+        if t.shape[0] == 1 and batch_size > 1:
+            t = t.expand(batch_size)
+        
+        # Seasonal forcing affects carrying capacity
+        season = 1.0 + 0.3 * torch.sin(2 * np.pi * t.view(-1, 1) / 10.0)
+        K_seasonal = self.K.unsqueeze(0) * season
+        
+        # Local dynamics (Rosenzweig-MacArthur)
+        # Prey: dN/dt = rN(1-N/K) - aNP/(1+N)
+        dN_local = self.r * N * (1 - N / K_seasonal) - self.a * N * P / (1 + N)
+        
+        # Predator: dP/dt = eaNP/(1+N) - dP
+        dP_local = self.e * self.a * N * P / (1 + N) - self.d * P
+        
+        # Migration based on resource gradient
+        # Prey migrate towards high carrying capacity
+        # Predators follow prey density
+        migration_N = self.m_prey * (N @ self.migration_matrix.T)
+        migration_P = self.m_pred * (P @ self.migration_matrix.T)
+        
+        # Total dynamics
+        dN = dN_local + migration_N
+        dP = dP_local + migration_P
+        
+        # Ensure non-negative (important for ecological realism)
+        dN = torch.where(N <= 0, torch.maximum(dN, torch.zeros_like(dN)), dN)
+        dP = torch.where(P <= 0, torch.maximum(dP, torch.zeros_like(dP)), dP)
+        
+        dx = torch.stack([dN, dP], dim=-1)
+        return dx.view(batch_size, -1)
+    
+    def sample_initial_conditions(self, n_samples: int) -> torch.Tensor:
+        """Sample ecologically realistic initial conditions."""
+        # Prey near carrying capacity with variation
+        N0 = self.K.unsqueeze(0) * (0.5 + 0.5 * torch.rand(n_samples, self.n_patches, device=self.device))
+        
+        # Predators at lower density
+        P0 = 0.2 * torch.rand(n_samples, self.n_patches, device=self.device) + 0.1
+        
+        # Add spatial heterogeneity - some patches empty
+        empty_patches = torch.rand(n_samples, self.n_patches, device=self.device) < 0.2
+        N0[empty_patches] = 0.1
+        P0[empty_patches] = 0.01
+        
+        x0 = torch.stack([N0, P0], dim=-1)
+        return x0.view(n_samples, -1)
+    
+    def get_ground_truth_expert_assignment(self, x: torch.Tensor, dx_dt: torch.Tensor) -> torch.Tensor:
+        """Assign based on ecological regime."""
+        x_reshaped = x.view(x.shape[0], self.n_patches, 2)
+        N = x_reshaped[..., 0]
+        P = x_reshaped[..., 1]
+        
+        # Total biomass and predator-prey ratio
+        total_N = torch.sum(N, dim=-1)
+        total_P = torch.sum(P, dim=-1)
+        ratio = total_P / (total_N + 0.1)
+        
+        # Expert 0: Prey-dominated (low predator ratio)
+        # Expert 1: Balanced coexistence
+        # Expert 2: Predator outbreak or crash dynamics
+        expert_assignment = torch.zeros(x.shape[0], dtype=torch.long, device=x.device)
+        expert_assignment[ratio < 0.1] = 0  # Prey dominated
+        expert_assignment[(ratio >= 0.1) & (ratio < 0.5)] = 1  # Balanced
+        expert_assignment[ratio >= 0.5] = 2  # Predator dominated/crash
+        
+        return expert_assignment
+
+
+class TMDD(SyntheticSystem):
+    """Target-Mediated Drug Disposition model with multiple binding states."""
+    
+    def _get_state_dim(self) -> int:
+        return 4  # Drug, Target, Complex, Internalized
+    
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        
+        params = config.get('params', {})
+        
+        # PK parameters
+        self.k_el = params.get('k_elimination', 0.1)  # Drug elimination
+        self.k_syn = params.get('k_synthesis', 1.0)  # Target synthesis
+        self.k_deg = params.get('k_degradation', 0.2)  # Target degradation
+        
+        # Binding parameters
+        self.k_on = params.get('k_on', 0.5)  # Binding rate
+        self.k_off = params.get('k_off', 0.05)  # Dissociation rate
+        self.k_int = params.get('k_internalization', 0.1)  # Complex internalization
+        
+        # Nonlinear feedback
+        self.IC50_feedback = params.get('IC50_feedback', 10.0)
+        self.n_hill = params.get('n_hill', 2.0)
+        
+    def dynamics(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        """TMDD dynamics with nonlinear feedback."""
+        # States: [Drug (D), Target (T), Complex (DT), Internalized (I)]
+        D = x[..., 0]
+        T = x[..., 1]
+        DT = x[..., 2]
+        I = x[..., 3]
+        
+        # Feedback: Target synthesis increases when drug is present
+        feedback = 1 + 3 * (D**self.n_hill) / (self.IC50_feedback**self.n_hill + D**self.n_hill)
+        
+        # Drug dynamics
+        dD = -self.k_el * D - self.k_on * D * T + self.k_off * DT
+        
+        # Target dynamics with feedback
+        dT = self.k_syn * feedback - self.k_deg * T - self.k_on * D * T + self.k_off * DT
+        
+        # Complex dynamics
+        dDT = self.k_on * D * T - self.k_off * DT - self.k_int * DT
+        
+        # Internalized complex
+        dI = self.k_int * DT - 0.5 * self.k_deg * I
+        
+        return torch.stack([dD, dT, dDT, dI], dim=-1)
+    
+    def sample_initial_conditions(self, n_samples: int) -> torch.Tensor:
+        """Sample from different dosing scenarios."""
+        # Different initial drug concentrations (doses)
+        D0 = torch.exp(torch.randn(n_samples, device=self.device) * 2) * 10  # Log-normal around 10
+        
+        # Target at steady state
+        T0 = torch.ones(n_samples, device=self.device) * (self.k_syn / self.k_deg)
+        
+        # No complex or internalized initially
+        DT0 = torch.zeros(n_samples, device=self.device)
+        I0 = torch.zeros(n_samples, device=self.device)
+        
+        return torch.stack([D0, T0, DT0, I0], dim=-1)
+    
+    def get_ground_truth_expert_assignment(self, x: torch.Tensor, dx_dt: torch.Tensor) -> torch.Tensor:
+        """Assign based on binding regime."""
+        D = x[..., 0]
+        T = x[..., 1]
+        DT = x[..., 2]
+        
+        # Binding saturation
+        saturation = DT / (T + DT + 1e-6)
+        
+        # Expert 0: Linear phase (low drug, unsaturated)
+        # Expert 1: Saturation phase (high binding)
+        # Expert 2: Depletion phase (target depleted)
+        expert_assignment = torch.zeros(x.shape[0], dtype=torch.long, device=x.device)
+        expert_assignment[(D < 1.0) & (saturation < 0.2)] = 0  # Linear
+        expert_assignment[(saturation >= 0.2) & (saturation < 0.8)] = 1  # Saturating
+        expert_assignment[(saturation >= 0.8) | (T < 0.1)] = 2  # Depleted
+        
+        return expert_assignment
+
+
+class TumorImmune(SyntheticSystem):
+    """Tumor-immune dynamics with PD-1/PD-L1 checkpoint inhibition."""
+    
+    def _get_state_dim(self) -> int:
+        return 5  # Tumor, Effector T cells, Regulatory T cells, PD-1, PD-L1
+    
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        
+        params = config.get('params', {})
+        
+        # Tumor parameters
+        self.r_tumor = params.get('tumor_growth', 0.5)
+        self.K_tumor = params.get('tumor_capacity', 100.0)
+        
+        # Immune parameters
+        self.k_kill = params.get('kill_rate', 1.0)
+        self.k_stim = params.get('stimulation', 0.2)
+        self.d_eff = params.get('effector_death', 0.1)
+        self.d_reg = params.get('regulatory_death', 0.05)
+        
+        # Checkpoint parameters
+        self.k_pd1 = params.get('pd1_expression', 0.1)
+        self.k_pdl1 = params.get('pdl1_expression', 0.2)
+        self.k_bind = params.get('checkpoint_binding', 0.5)
+        self.k_inhibit = params.get('inhibition_strength', 0.8)
+        
+        # Treatment (anti-PD-1 antibody concentration)
+        self.treatment_schedule = params.get('treatment_schedule', 'none')
+        
+    def dynamics(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        """Tumor-immune dynamics with checkpoint interactions."""
+        T = x[..., 0]   # Tumor cells
+        E = x[..., 1]   # Effector T cells
+        R = x[..., 2]   # Regulatory T cells
+        P1 = x[..., 3]  # PD-1 expression
+        PL = x[..., 4]  # PD-L1 expression
+        
+        # Ensure t is properly shaped
+        if t.dim() == 0:
+            t = t.unsqueeze(0).expand(x.shape[0])
+        
+        # Treatment effect (periodic dosing)
+        if self.treatment_schedule == 'periodic':
+            drug = 10.0 * (torch.sin(0.5 * t) > 0.8).float()
+        else:
+            drug = torch.zeros_like(t)
+        
+        # Ensure drug is properly shaped for broadcasting
+        if drug.dim() == 1:
+            drug = drug.view(-1, 1)
+        
+        # Checkpoint inhibition reduces immune suppression
+        checkpoint_bound = self.k_bind * P1 * PL / (1 + P1 * PL)
+        inhibition = self.k_inhibit * checkpoint_bound / (1 + drug.squeeze(-1))
+        
+        # Tumor dynamics (logistic growth - immune killing)
+        kill_rate = self.k_kill * (1 - inhibition)  # Inhibition reduces killing
+        dT = self.r_tumor * T * (1 - T / self.K_tumor) - kill_rate * E * T / (1 + R)
+        
+        # Effector T cell dynamics (stimulation by tumor - suppression)
+        dE = self.k_stim * T * E / (10 + T) - self.d_eff * E - inhibition * E
+        
+        # Regulatory T cell dynamics (recruited by tumor)
+        dR = 0.1 * T * R / (50 + T) - self.d_reg * R
+        
+        # PD-1 expression (upregulated by activation)
+        dP1 = self.k_pd1 * E / (1 + E) - 0.1 * P1 - drug.squeeze(-1) * P1
+        
+        # PD-L1 expression (upregulated by tumor)
+        dPL = self.k_pdl1 * T / (10 + T) - 0.1 * PL
+        
+        # Ensure non-negative
+        dx = torch.stack([dT, dE, dR, dP1, dPL], dim=-1)
+        return torch.where(x > 0, dx, torch.maximum(dx, torch.zeros_like(dx)))
+    
+    def sample_initial_conditions(self, n_samples: int) -> torch.Tensor:
+        """Sample from different disease stages."""
+        # Early stage: small tumor, active immune
+        early = n_samples // 3
+        T0_early = torch.rand(early, device=self.device) * 10 + 1
+        E0_early = torch.rand(early, device=self.device) * 5 + 5
+        
+        # Mid stage: growing tumor, struggling immune
+        mid = n_samples // 3
+        T0_mid = torch.rand(mid, device=self.device) * 30 + 20
+        E0_mid = torch.rand(mid, device=self.device) * 3 + 2
+        
+        # Late stage: large tumor, exhausted immune
+        late = n_samples - early - mid
+        T0_late = torch.rand(late, device=self.device) * 30 + 60
+        E0_late = torch.rand(late, device=self.device) * 2 + 0.5
+        
+        # Combine
+        T0 = torch.cat([T0_early, T0_mid, T0_late])
+        E0 = torch.cat([E0_early, E0_mid, E0_late])
+        R0 = torch.rand(n_samples, device=self.device) * 2
+        P1_0 = torch.rand(n_samples, device=self.device) * 0.5
+        PL_0 = T0 / 100  # PD-L1 proportional to tumor
+        
+        return torch.stack([T0, E0, R0, P1_0, PL_0], dim=-1)
+    
+    def get_ground_truth_expert_assignment(self, x: torch.Tensor, dx_dt: torch.Tensor) -> torch.Tensor:
+        """Assign based on disease/treatment phase."""
+        T = x[..., 0]
+        E = x[..., 1]
+        
+        # Immune-tumor ratio
+        ratio = E / (T + 1)
+        
+        # Expert 0: Immune control (high ratio)
+        # Expert 1: Dynamic balance (medium ratio)
+        # Expert 2: Tumor escape (low ratio)
+        expert_assignment = torch.zeros(x.shape[0], dtype=torch.long, device=x.device)
+        expert_assignment[ratio > 0.5] = 0  # Immune control
+        expert_assignment[(ratio >= 0.1) & (ratio <= 0.5)] = 1  # Balance
+        expert_assignment[ratio < 0.1] = 2  # Tumor escape
+        
+        return expert_assignment
+
+
 class SyntheticDataGenerator:
     """Generate synthetic data for AME-ODE experiments with caching support."""
     
@@ -428,6 +837,14 @@ class SyntheticDataGenerator:
                     systems[name] = PiecewiseLorenz(system_config)
                 elif name == 'van_der_pol_network':
                     systems[name] = VanDerPolNetwork(system_config)
+                elif name == 'fitzhugh_nagumo':
+                    systems[name] = FitzHughNagumo(system_config)
+                elif name == 'predator_prey_migration':
+                    systems[name] = PredatorPreyMigration(system_config)
+                elif name == 'tmdd':
+                    systems[name] = TMDD(system_config)
+                elif name == 'tumor_immune':
+                    systems[name] = TumorImmune(system_config)
                 else:
                     print(f"Unknown system: {name}")
         

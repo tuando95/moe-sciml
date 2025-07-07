@@ -1,0 +1,120 @@
+# Configuration for Tumor-Immune checkpoint inhibition experiments
+# Modern immunotherapy QSP model with treatment effects
+
+# Model Architecture - optimized for immune-oncology dynamics
+model:
+  state_dim: 5  # Tumor, Effector T, Regulatory T, PD-1, PD-L1
+  n_experts: 4  # Response/resistance phases
+  expert_architecture:
+    depth: 5
+    width: 128
+    activation: "tanh"
+    residual: true
+    dropout: 0.0
+  gating_architecture:
+    depth: 3
+    width: 64
+    activation: "relu"
+  history_embedding:
+    type: "lstm"
+    hidden_dim: 64
+    num_layers: 1
+  temperature: 0.3  # Sharp routing for treatment response
+  expert_threshold: 0.2
+  # Initialization settings
+  use_improved_init: true
+  expert_init_strategy: "mixed"
+  gating_init_strategy: "uniform"
+
+# Training Configuration
+training:
+  batch_size: 2048
+  learning_rate: 3e-4
+  num_epochs: 250  # Longer for treatment cycles
+  early_stopping_patience: 35
+  gradient_clip_norm: 5.0
+  sequence_length: 120  # Cover treatment period
+  optimizer: "adam"
+  scheduler:
+    type: "cosine"
+    warmup_epochs: 10
+    min_lr: 1e-6
+  regularization:
+    route_weight: 0.1
+    expert_weight: 1e-6
+    diversity_weight: 0.0
+    smoothness_weight: 0.02  # Smooth immune dynamics
+    balance_weight: 0.0
+
+# Integration Configuration
+integration:
+  method: "dopri5"
+  rtol: 1e-5
+  atol: 1e-7
+  max_step_size: 0.1
+  min_step_size: 1e-5
+  adaptive_step: false
+  routing_aware_step: false
+  dynamics_max_norm: 50.0
+
+# Data Configuration
+data:
+  synthetic_systems:
+    - name: "tumor_immune"
+      enabled: true
+      n_trajectories: 10000
+      trajectory_length: 120  # Long enough for response
+      sampling_dt: 0.1
+      params:
+        tumor_growth: 0.5        # Growth rate
+        tumor_capacity: 100.0    # Carrying capacity
+        kill_rate: 1.0          # T cell killing
+        stimulation: 0.2        # T cell activation
+        effector_death: 0.1     # T cell turnover
+        regulatory_death: 0.05  # Treg turnover
+        pd1_expression: 0.1     # PD-1 upregulation
+        pdl1_expression: 0.2    # PD-L1 on tumor
+        checkpoint_binding: 0.5  # PD-1/PD-L1 affinity
+        inhibition_strength: 0.8 # Immune suppression
+        treatment_schedule: "periodic"  # Or "none", "continuous"
+  noise:
+    observation_noise: 0.01
+    process_noise: 0.0001
+  train_val_test_split: [0.6, 0.2, 0.2]
+  temporal_sampling: "uniform"
+  augmentation:
+    random_rotation: false
+    random_scaling: true  # Vary tumor sizes
+
+# Computational Resources
+compute:
+  device: "cuda"
+  mixed_precision: false
+  gradient_checkpointing: false
+  multi_gpu: false
+  num_workers: 2
+
+# Logging
+logging:
+  log_dir: "./logs_tumor_immune"
+  checkpoint_dir: "./checkpoints_tumor_immune"
+  tensorboard: true
+  wandb:
+    enabled: false
+  save_frequency: 10
+  log_frequency: 10
+
+# Evaluation
+evaluation:
+  metrics:
+    - "trajectory_mse"
+    - "computational_efficiency"
+    - "expert_specialization"
+    - "long_term_stability"
+    - "phase_space_geometry"
+    - "energy_conservation"  # Cell conservation
+    - "routing_stability"
+  visualization:
+    phase_portraits: true
+    routing_heatmaps: true
+    trajectory_decomposition: true

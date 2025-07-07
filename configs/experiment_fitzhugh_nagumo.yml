@@ -1,0 +1,113 @@
+# Configuration for FitzHugh-Nagumo neural dynamics experiments
+# Showcases AME-ODE's ability to handle biological systems with multiple timescales
+
+# Model Architecture - optimized for neural dynamics
+model:
+  state_dim: 20  # 10 neurons × 2 (voltage + recovery)
+  n_experts: 4  # Fewer experts for clear regime separation
+  expert_architecture:
+    depth: 5
+    width: 128
+    activation: "tanh"  # Smooth for biological dynamics
+    residual: true
+    dropout: 0.0
+  gating_architecture:
+    depth: 3
+    width: 64
+    activation: "relu"
+  history_embedding:
+    type: "lstm"
+    hidden_dim: 64
+    num_layers: 1
+  temperature: 0.3  # Sharp routing for distinct neural states
+  expert_threshold: 0.2  # Sparse expert usage
+  # Initialization settings
+  use_improved_init: true
+  expert_init_strategy: "mixed"
+  gating_init_strategy: "uniform"
+
+# Training Configuration
+training:
+  batch_size: 2048
+  learning_rate: 3e-4
+  num_epochs: 200
+  early_stopping_patience: 30
+  gradient_clip_norm: 5.0
+  sequence_length: 80
+  optimizer: "adam"
+  scheduler:
+    type: "cosine"
+    warmup_epochs: 10
+    min_lr: 1e-6
+  regularization:
+    route_weight: 0.1        # Sparse routing
+    expert_weight: 1e-6      # Minimal L2
+    diversity_weight: 0.0    # Allow specialization
+    smoothness_weight: 0.02  # Slightly higher for neural dynamics
+    balance_weight: 0.0      # Natural specialization
+
+# Integration Configuration
+integration:
+  method: "dopri5"
+  rtol: 1e-4
+  atol: 1e-6
+  max_step_size: 0.1
+  min_step_size: 1e-5
+  adaptive_step: false
+  routing_aware_step: false
+  dynamics_max_norm: 50.0
+
+# Data Configuration
+data:
+  synthetic_systems:
+    - name: "fitzhugh_nagumo"
+      enabled: true
+      n_trajectories: 10000
+      trajectory_length: 50  # Enough for multiple spikes
+      sampling_dt: 0.01
+      params:
+        n_neurons: 10
+        a: 0.7  # Recovery timescale parameter
+        b: 0.8  # Recovery coupling
+        I_ext: [0.0, 0.5]  # External current range (creates heterogeneity)
+  noise:
+    observation_noise: 0.01
+    process_noise: 0.0001
+  train_val_test_split: [0.6, 0.2, 0.2]
+  temporal_sampling: "uniform"
+  augmentation:
+    random_rotation: false  # Preserve biological structure
+    random_scaling: true
+
+# Computational Resources
+compute:
+  device: "cuda"
+  mixed_precision: false
+  gradient_checkpointing: false
+  multi_gpu: false
+  num_workers: 2
+
+# Logging
+logging:
+  log_dir: "./logs_fitzhugh_nagumo"
+  checkpoint_dir: "./checkpoints_fitzhugh_nagumo"
+  tensorboard: true
+  wandb:
+    enabled: false
+  save_frequency: 10
+  log_frequency: 10
+
+# Evaluation
+evaluation:
+  metrics:
+    - "trajectory_mse"
+    - "computational_efficiency"
+    - "expert_specialization"
+    - "long_term_stability"
+    - "phase_space_geometry"
+    - "energy_conservation"
+    - "routing_stability"
+  visualization:
+    phase_portraits: true
+    routing_heatmaps: true
+    trajectory_decomposition: true
