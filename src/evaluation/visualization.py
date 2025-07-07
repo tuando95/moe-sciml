@@ -33,9 +33,9 @@ class AMEODEVisualizer:
         """Plot phase portraits for individual experts or mixture."""
         device = next(model.parameters()).device
         
-        # Create grid
-        x_range = torch.linspace(state_bounds[0], state_bounds[1], n_grid)
-        y_range = torch.linspace(state_bounds[0], state_bounds[1], n_grid)
+        # Create grid on the correct device
+        x_range = torch.linspace(state_bounds[0], state_bounds[1], n_grid, device=device)
+        y_range = torch.linspace(state_bounds[0], state_bounds[1], n_grid, device=device)
         X, Y = torch.meshgrid(x_range, y_range, indexing='xy')
         
         # Flatten grid points
@@ -43,11 +43,10 @@ class AMEODEVisualizer:
         
         # Add zeros for additional dimensions if needed
         if model.state_dim > 2:
-            zeros = torch.zeros(grid_points.shape[0], model.state_dim - 2)
+            zeros = torch.zeros(grid_points.shape[0], model.state_dim - 2, device=device)
             grid_points = torch.cat([grid_points, zeros], dim=-1)
         
-        grid_points = grid_points.to(device)
-        t = torch.zeros(grid_points.shape[0]).to(device)
+        t = torch.zeros(grid_points.shape[0], device=device)
         
         with torch.no_grad():
             if expert_idx is not None:
@@ -73,8 +72,10 @@ class AMEODEVisualizer:
         
         # Quiver plot
         skip = 2  # Skip some points for clarity
+        X_cpu = X.cpu().numpy()
+        Y_cpu = Y.cpu().numpy()
         ax.quiver(
-            X[::skip, ::skip], Y[::skip, ::skip],
+            X_cpu[::skip, ::skip], Y_cpu[::skip, ::skip],
             dx_norm[::skip, ::skip], dy_norm[::skip, ::skip],
             magnitude[::skip, ::skip],
             cmap='viridis',
@@ -102,18 +103,17 @@ class AMEODEVisualizer:
         """Plot heatmaps of expert routing weights across state space."""
         device = next(model.parameters()).device
         
-        # Create grid
-        x_range = torch.linspace(state_bounds[0], state_bounds[1], n_grid)
-        y_range = torch.linspace(state_bounds[0], state_bounds[1], n_grid)
+        # Create grid on the correct device
+        x_range = torch.linspace(state_bounds[0], state_bounds[1], n_grid, device=device)
+        y_range = torch.linspace(state_bounds[0], state_bounds[1], n_grid, device=device)
         X, Y = torch.meshgrid(x_range, y_range, indexing='xy')
         
         grid_points = torch.stack([X.flatten(), Y.flatten()], dim=-1)
         if model.state_dim > 2:
-            zeros = torch.zeros(grid_points.shape[0], model.state_dim - 2)
+            zeros = torch.zeros(grid_points.shape[0], model.state_dim - 2, device=device)
             grid_points = torch.cat([grid_points, zeros], dim=-1)
         
-        grid_points = grid_points.to(device)
-        t = torch.zeros(grid_points.shape[0]).to(device)
+        t = torch.zeros(grid_points.shape[0], device=device)
         
         # Get routing weights
         with torch.no_grad():

@@ -526,11 +526,11 @@ class TraditionalMoE(nn.Module):
         )
         
         # Integration settings (for fair comparison)
-        self.rtol = config['integration']['rtol']
-        self.atol = config['integration']['atol']
+        self.rtol = float(config['integration']['rtol'])
+        self.atol = float(config['integration']['atol'])
         self.method = config['integration']['method']
         self.adjoint = config['integration'].get('adjoint', True)
-        self.max_norm = config['integration'].get('dynamics_max_norm', 0.0)  # 0 = no limit
+        self.max_norm = float(config['integration'].get('dynamics_max_norm', 0.0))  # 0 = no limit
     
     def forward(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
         """MoE forward with temporal encoding for ODE integration."""

@@ -80,9 +80,11 @@ class AMEODETrainer:
         # Training state
         self.current_epoch = 0
         self.best_val_loss = float('inf')
+        self.best_val_reconstruction = float('inf')  # Track best reconstruction separately
         self.metrics_history = {
             'train_loss': [],
             'val_loss': [],
+            'val_reconstruction': [],  # Track reconstruction separately
             'expert_usage': [],
             'routing_entropy': [],
         }
@@ -330,6 +332,7 @@ class AMEODETrainer:
             'scheduler_state_dict': self.scheduler.state_dict() if self.scheduler else None,
             'metrics_history': self.metrics_history,
             'best_val_loss': self.best_val_loss,
+            'best_val_reconstruction': self.best_val_reconstruction,
             'config': self.config.to_dict(),
             'reg_adjustment_history': self.reg_adjustment_history,
         }
@@ -360,6 +363,7 @@ class AMEODETrainer:
         self.current_epoch = checkpoint['epoch']
         self.metrics_history = checkpoint['metrics_history']
         self.best_val_loss = checkpoint['best_val_loss']
+        self.best_val_reconstruction = checkpoint.get('best_val_reconstruction', self.best_val_loss)
         self.reg_adjustment_history = checkpoint.get('reg_adjustment_history', [])
     
     def train(
@@ -394,20 +398,23 @@ class AMEODETrainer:
             # Record metrics
             self.metrics_history['train_loss'].append(train_metrics['loss'])
             self.metrics_history['val_loss'].append(val_metrics['loss'])
+            self.metrics_history['val_reconstruction'].append(val_metrics['reconstruction'])
             self.metrics_history['routing_entropy'].append(val_metrics['routing_entropy'])
             
             # Print epoch summary
             print(f"\nEpoch {epoch}/{num_epochs}")
             print(f"Train Loss: {train_metrics['loss']:.4f}")
             print(f"Val Loss: {val_metrics['loss']:.4f}")
-            print(f"Val Recon: {val_metrics['reconstruction']:.4f}")
+            print(f"Val Recon: {val_metrics['reconstruction']:.4f} (best: {self.best_val_reconstruction:.4f})")
             print(f"Routing Entropy: {val_metrics['routing_entropy']:.4f}")
             print(f"Expert Usage Var: {val_metrics['expert_usage_variance']:.4f}")
             
-            # Check for best model
-            is_best = val_metrics['loss'] < self.best_val_loss
+            # Check for best model based on reconstruction loss only
+            # This ensures fair comparison across epochs with changing regularization
+            is_best = val_metrics['reconstruction'] < self.best_val_reconstruction
             if is_best:
-                self.best_val_loss = val_metrics['loss']
+                self.best_val_reconstruction = val_metrics['reconstruction']
+                self.best_val_loss = val_metrics['loss']  # Store total loss for reference
                 patience_counter = 0
             else:
                 patience_counter += 1
@@ -423,12 +430,18 @@ class AMEODETrainer:
         
         # Save final metrics
         self._save_training_summary()
+        
+        # Print final summary
+        print(f"\nTraining completed!")
+        print(f"Best validation reconstruction loss: {self.best_val_reconstruction:.6f}")
+        print(f"Note: Model selection based on reconstruction loss only (not total loss)")
     
     def _save_training_summary(self):
         """Save training summary and metrics."""
         summary = {
             'final_epoch': self.current_epoch,
             'best_val_loss': self.best_val_loss,
+            'best_val_reconstruction': self.best_val_reconstruction,
             'metrics_history': self.metrics_history,
             'reg_adjustment_history': self.reg_adjustment_history,
             'config': self.config.to_dict(),
