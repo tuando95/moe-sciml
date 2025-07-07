@@ -181,8 +181,6 @@ class AMEODE(nn.Module):
         if self.adaptive_step:
             # Use adaptive step size from torchdiffeq
             options = {
-                'rtol': self.rtol,
-                'atol': self.atol,
                 'max_num_steps': 10000,
             }
             
@@ -194,6 +192,8 @@ class AMEODE(nn.Module):
                 ode_func_with_info,
                 x0,
                 t_span,
+                rtol=self.rtol,
+                atol=self.atol,
                 method=self.method,
                 options=options,
             )
