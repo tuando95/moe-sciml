@@ -452,8 +452,11 @@ class FitzHughNagumo(SyntheticSystem):
         dv = v - v**3 / 3 - w + self.I_ext.unsqueeze(0)
         
         # Add diffusive coupling
-        coupling_term = (v.unsqueeze(1) - v.unsqueeze(2)) @ self.coupling.T
-        dv += coupling_term.squeeze(1)
+        # v shape: (batch, n_neurons)
+        # self.coupling shape: (n_neurons, n_neurons)
+        # Compute coupling as matrix multiplication
+        coupling_term = v @ self.coupling.T  # (batch, n_neurons)
+        dv += coupling_term
         
         # Recovery dynamics: dw/dt = (v + a - b*w) / τ
         # τ varies with activity level creating multiple timescales
