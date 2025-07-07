@@ -18,7 +18,7 @@ model:
   history_embedding:
     type: "lstm"
     hidden_dim: 64  # Same as quick_test
-    num_layers: 2  # Simpler than original
+    num_layers: 1  # Simpler than original
   temperature: 0.3  # Sharp routing for stiff/non-stiff separation
   expert_threshold: 0.2  # Higher threshold for sparse routing
   # Initialization settings
