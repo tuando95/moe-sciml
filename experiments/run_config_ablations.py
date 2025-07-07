@@ -43,9 +43,10 @@ def load_config_with_includes(config_path: Path) -> Dict[str, Any]:
 
 def run_single_experiment(config_path: Path, gpu_id: int = 0) -> Dict[str, Any]:
     """Run a single experiment using the training script."""
-    # Set GPU
+    # Set GPU and ensure unbuffered output
     env = os.environ.copy()
     env['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+    env['PYTHONUNBUFFERED'] = '1'
     
     # Extract experiment name from config path
     exp_name = config_path.stem
@@ -68,7 +69,7 @@ def run_single_experiment(config_path: Path, gpu_id: int = 0) -> Dict[str, Any]:
                 break
     
     cmd = [
-        'python', 'train_progressive.py',
+        'python', '-u', 'train_progressive.py',
         '--config', str(config_path),
         '--system', system_name,
         '--device', 'cuda'

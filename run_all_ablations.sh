@@ -98,14 +98,18 @@ run_with_progress() {
     echo "Command: $cmd"
     echo ""
     
-    # Run command and capture output
-    eval "$cmd" 2>&1 | tee -a "$LOG_FILE"
+    # Run command with unbuffered output
+    # Use stdbuf to disable buffering and ensure real-time output
+    stdbuf -o0 -e0 bash -c "$cmd" 2>&1 | stdbuf -o0 -e0 tee -a "$LOG_FILE"
     
     return ${PIPESTATUS[0]}
 }
 
+# Set Python to use unbuffered output
+export PYTHONUNBUFFERED=1
+
 # Run the ablations
-CMD="python experiments/run_config_ablations.py \
+CMD="python -u experiments/run_config_ablations.py \
     --category $CATEGORY \
     --config-dir configs/ablation \
     --output-dir ablation_results \
