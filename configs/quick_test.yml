@@ -5,7 +5,7 @@ model:
   state_dim: 4  # Will be overridden dynamically based on the data
   n_experts: 4  # More experts for better coverage
   expert_architecture:
-    depth: 3  # Shallower but wider
+    depth: 5  # Shallower but wider
     width: 128  # Wider for more capacity
     activation: "tanh"  # Better for continuous dynamics
     residual: true
@@ -27,9 +27,9 @@ model:
 
 # Training Configuration - minimal epochs
 training:
-  batch_size: 128  # Larger batch for stability
+  batch_size: 256  # Larger batch for stability
   learning_rate: 3e-4  # Optimal learning rate
-  num_epochs: 100  # Very short
+  num_epochs: 200  # Very short
   early_stopping_patience: 35
   gradient_clip_norm: 5.0  # Less restrictive clipping
   sequence_length: 50
@@ -62,7 +62,7 @@ data:
   synthetic_systems:
     - name: "multi_scale_oscillators"
       enabled: true
-      n_trajectories: 1000  # More data
+      n_trajectories: 2000  # More data
       trajectory_length: 100  # Longer trajectories
       sampling_dt: 0.01  # Finer sampling
       params:
