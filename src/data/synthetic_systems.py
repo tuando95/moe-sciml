@@ -121,7 +121,7 @@ class SyntheticSystem(ABC):
         
         # Euler-Maruyama integration with stability checks
         for i in tqdm(range(1, n_steps), desc="SDE integration", leave=False):
-            dt = t_span[i] - t_span[i-1]
+            dt = (t_span[i] - t_span[i-1]).item()  # Convert to Python scalar
             t = t_span[i-1]
             x = trajectories[i-1]
             
@@ -144,7 +144,8 @@ class SyntheticSystem(ABC):
             )
             
             # Stochastic part (Brownian motion)
-            dW = torch.randn_like(x) * torch.sqrt(dt)
+            dt_tensor = torch.tensor(dt, device=x.device)  # Create tensor on correct device
+            dW = torch.randn_like(x) * torch.sqrt(dt_tensor)
             dx_stoch = process_noise_std * dW
             
             # Update state with clamping
@@ -293,12 +294,12 @@ class PiecewiseLorenz(SyntheticSystem):
         n_outside = n_samples - n_inside
         
         # Inside: small radius
-        x_inside = torch.randn(n_inside, 3) * (self.R * 0.5)
+        x_inside = torch.randn(n_inside, 3, device=self.device) * (self.R * 0.5)
         
         # Outside: larger radius
-        x_outside = torch.randn(n_outside, 3)
+        x_outside = torch.randn(n_outside, 3, device=self.device)
         x_outside = x_outside / torch.norm(x_outside, dim=-1, keepdim=True)
-        x_outside = x_outside * (self.R * 1.5 + torch.rand(n_outside, 1))
+        x_outside = x_outside * (self.R * 1.5 + torch.rand(n_outside, 1, device=self.device))
         
         return torch.cat([x_inside, x_outside], dim=0)
     
@@ -333,12 +334,12 @@ class VanDerPolNetwork(SyntheticSystem):
         self.mu_range = params.get('mu_range', [0.1, 3.0])
         
         # Sample parameters
-        self.mu = torch.FloatTensor(self.n_oscillators).uniform_(*self.mu_range)
+        self.mu = torch.FloatTensor(self.n_oscillators).uniform_(*self.mu_range).to(self.device)
         
         # Coupling matrix (random sparse coupling)
         coupling_prob = 0.3
-        self.coupling = torch.randn(self.n_oscillators, self.n_oscillators) * 0.1
-        mask = torch.rand(self.n_oscillators, self.n_oscillators) < coupling_prob
+        self.coupling = torch.randn(self.n_oscillators, self.n_oscillators, device=self.device) * 0.1
+        mask = torch.rand(self.n_oscillators, self.n_oscillators, device=self.device) < coupling_prob
         self.coupling = self.coupling * mask
         self.coupling = (self.coupling + self.coupling.T) / 2  # Symmetric
         self.coupling.fill_diagonal_(0)  # No self-coupling
@@ -371,8 +372,8 @@ class VanDerPolNetwork(SyntheticSystem):
     def sample_initial_conditions(self, n_samples: int) -> torch.Tensor:
         """Sample from limit cycle region."""
         # Random positions and velocities near limit cycle
-        pos = torch.randn(n_samples, self.n_oscillators) * 2
-        vel = torch.randn(n_samples, self.n_oscillators) * 2
+        pos = torch.randn(n_samples, self.n_oscillators, device=self.device) * 2
+        vel = torch.randn(n_samples, self.n_oscillators, device=self.device) * 2
         x0 = torch.stack([pos, vel], dim=-1)
         return x0.view(n_samples, -1)
     
