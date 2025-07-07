@@ -257,7 +257,13 @@ class StabilityAwareLoss(AMEODELoss):
             # Integrate perturbed trajectory one step
             with torch.no_grad():
                 dt = torch.tensor(0.01, device=x_t.device)  # Small time step
-                dx_perturbed = model.ode_func(torch.tensor(t * dt), x_perturbed)
+                # Use compute_dynamics for AME-ODE compatibility
+                if hasattr(model, 'compute_dynamics'):
+                    # AME-ODE: compute_dynamics returns dynamics and model_info
+                    dx_perturbed, _ = model.compute_dynamics(torch.tensor(t * dt), x_perturbed)
+                else:
+                    # Fallback for other models with ode_func
+                    dx_perturbed = model.ode_func(torch.tensor(t * dt), x_perturbed)
                 x_next_perturbed = x_perturbed + dt * dx_perturbed
             
             # Measure divergence
