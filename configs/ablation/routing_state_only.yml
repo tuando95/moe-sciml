@@ -1,4 +1,4 @@
-# Routing ablation: State-only routing (no history)
+# Routing ablation: State-only routing (minimal history)
 # Inherits from base_multiscale.yml
 
 !include base_multiscale.yml
@@ -6,9 +6,9 @@
 # Override specific settings for state-only routing
 model:
   history_embedding:
-    type: "none"  # Disable history embedding
-    hidden_dim: 0
-    num_layers: 0
+    type: "lstm"
+    hidden_dim: 1  # Minimal history dimension to effectively disable history
+    num_layers: 1
 
 # Adjust logging
 logging:

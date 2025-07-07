@@ -1,16 +1,15 @@
-# Routing ablation: Uniform routing (disable gating network)
+# Routing ablation: Uniform routing (extremely high temperature)
 # Inherits from base_multiscale.yml
 
 !include base_multiscale.yml
 
 # Override for uniform routing
 model:
-  gating_architecture:
-    type: "uniform"  # Special mode for uniform weights
-    depth: 1  # Minimal network
-    width: 1
-  temperature: 1.0  # Doesn't matter for uniform
+  temperature: 1000.0  # Extremely high temperature for uniform routing
   expert_threshold: 0.0  # All experts always active
+  gating_architecture:
+    depth: 1  # Minimal network since it won't matter
+    width: 16
 
 # Adjust logging
 logging:
