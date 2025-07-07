@@ -54,6 +54,8 @@ integration:
   min_step_size: 1e-4
   adaptive_step: false  # Fixed step for speed
   routing_aware_step: false
+  # Stability control
+  dynamics_max_norm: 50.0  # Maximum norm for dynamics (0 = no limit)
 
 # Data Configuration - small dataset
 data:

@@ -37,6 +37,7 @@ class SingleNeuralODE(nn.Module):
         self.atol = config['integration']['atol']
         self.method = config['integration']['method']
         self.adjoint = config['integration'].get('adjoint', True)
+        self.max_norm = config['integration'].get('dynamics_max_norm', 0.0)  # 0 = no limit
     
     def _build_network(self) -> nn.Module:
         """Build the neural network for dynamics."""
@@ -75,7 +76,18 @@ class SingleNeuralODE(nn.Module):
         inputs = torch.cat([x, t, sin_t, cos_t], dim=-1)
         
         # Forward through network
-        return self.net(inputs)
+        dx_dt = self.net(inputs)
+        
+        # Optional dynamics bounding for stability
+        if hasattr(self, 'max_norm') and self.max_norm > 0:
+            dx_dt_norm = torch.norm(dx_dt, dim=-1, keepdim=True)
+            scaling_factor = torch.minimum(
+                torch.ones_like(dx_dt_norm),
+                self.max_norm / (dx_dt_norm + 1e-6)
+            )
+            dx_dt = dx_dt * scaling_factor
+        
+        return dx_dt
     
     def integrate(
         self,
@@ -145,6 +157,7 @@ class MultiScaleNeuralODE(nn.Module):
         self.atol = config['integration']['atol']
         self.method = config['integration']['method']
         self.adjoint = config['integration'].get('adjoint', True)
+        self.max_norm = config['integration'].get('dynamics_max_norm', 0.0)  # 0 = no limit
     
     def _build_network(self, timescale: str) -> nn.Module:
         """Build network for specific timescale."""
@@ -260,6 +273,7 @@ class AugmentedNeuralODE(nn.Module):
         self.atol = config['integration']['atol']
         self.method = config['integration']['method']
         self.adjoint = config['integration'].get('adjoint', True)
+        self.max_norm = config['integration'].get('dynamics_max_norm', 0.0)  # 0 = no limit
     
     def forward(self, t: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         """Augmented ODE function with stability control."""
@@ -273,13 +287,13 @@ class AugmentedNeuralODE(nn.Module):
         
         # Add stability control: bound the dynamics
         # This prevents explosive growth that causes NaN
-        max_norm = 10.0  # Maximum allowed norm for dynamics
-        dz_dt_norm = torch.norm(dz_dt, dim=-1, keepdim=True)
-        scaling_factor = torch.minimum(
-            torch.ones_like(dz_dt_norm),
-            max_norm / (dz_dt_norm + 1e-6)
-        )
-        dz_dt = dz_dt * scaling_factor
+        if self.max_norm > 0:  # Only apply if max_norm is set
+            dz_dt_norm = torch.norm(dz_dt, dim=-1, keepdim=True)
+            scaling_factor = torch.minimum(
+                torch.ones_like(dz_dt_norm),
+                self.max_norm / (dz_dt_norm + 1e-6)
+            )
+            dz_dt = dz_dt * scaling_factor
         
         return dz_dt
     
@@ -347,6 +361,7 @@ class EnsembleNeuralODE(nn.Module):
         self.atol = config['integration']['atol']
         self.method = config['integration']['method']
         self.adjoint = config['integration'].get('adjoint', True)
+        self.max_norm = config['integration'].get('dynamics_max_norm', 0.0)  # 0 = no limit
     
     def _build_single_model(self, config: Dict[str, Any], model_id: int) -> nn.Module:
         """Build a single model in the ensemble with diversity."""
@@ -409,13 +424,13 @@ class EnsembleNeuralODE(nn.Module):
             pred = model(inputs)
             
             # Bound individual model predictions to prevent outliers
-            pred_norm = torch.norm(pred, dim=-1, keepdim=True)
-            max_norm = 10.0
-            scaling_factor = torch.minimum(
-                torch.ones_like(pred_norm),
-                max_norm / (pred_norm + 1e-6)
-            )
-            pred = pred * scaling_factor
+            if self.max_norm > 0:
+                pred_norm = torch.norm(pred, dim=-1, keepdim=True)
+                scaling_factor = torch.minimum(
+                    torch.ones_like(pred_norm),
+                    self.max_norm / (pred_norm + 1e-6)
+                )
+                pred = pred * scaling_factor
             
             predictions.append(pred)
         
@@ -423,13 +438,15 @@ class EnsembleNeuralODE(nn.Module):
         dx_dt = torch.stack(predictions).mean(dim=0)
         
         # Additional stability check on the final average
-        dx_dt_norm = torch.norm(dx_dt, dim=-1, keepdim=True)
-        final_scaling = torch.minimum(
-            torch.ones_like(dx_dt_norm),
-            max_norm / (dx_dt_norm + 1e-6)
-        )
+        if self.max_norm > 0:
+            dx_dt_norm = torch.norm(dx_dt, dim=-1, keepdim=True)
+            final_scaling = torch.minimum(
+                torch.ones_like(dx_dt_norm),
+                self.max_norm / (dx_dt_norm + 1e-6)
+            )
+            return dx_dt * final_scaling
         
-        return dx_dt * final_scaling
+        return dx_dt
     
     def integrate(
         self,
@@ -538,13 +555,13 @@ class TraditionalMoE(nn.Module):
             expert_out = expert(inputs)
             
             # Bound expert outputs for stability
-            expert_norm = torch.norm(expert_out, dim=-1, keepdim=True)
-            max_norm = 10.0
-            scaling_factor = torch.minimum(
-                torch.ones_like(expert_norm),
-                max_norm / (expert_norm + 1e-6)
-            )
-            expert_out = expert_out * scaling_factor
+            if self.max_norm > 0:
+                expert_norm = torch.norm(expert_out, dim=-1, keepdim=True)
+                scaling_factor = torch.minimum(
+                    torch.ones_like(expert_norm),
+                    self.max_norm / (expert_norm + 1e-6)
+                )
+                expert_out = expert_out * scaling_factor
             
             output += weights[:, i:i+1] * expert_out
         
