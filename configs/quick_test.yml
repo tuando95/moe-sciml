@@ -3,51 +3,51 @@
 # Model Architecture - minimal for fast testing
 model:
   state_dim: 4  # Will be overridden dynamically based on the data
-  n_experts: 2
+  n_experts: 4  # More experts for better coverage
   expert_architecture:
-    depth: 4
-    width: 64  # Increased capacity for better dynamics learning
-    activation: "relu"
+    depth: 3  # Shallower but wider
+    width: 128  # Wider for more capacity
+    activation: "tanh"  # Better for continuous dynamics
     residual: true
     dropout: 0.0
   gating_architecture:
-    depth: 2
-    width: 16
+    depth: 3  # Deeper gating for better routing
+    width: 32  # Wider gating
     activation: "relu"
   history_embedding:
     type: "lstm"
-    hidden_dim: 16
+    hidden_dim: 32  # Larger history
     num_layers: 1
-  temperature: 0.5  # Lower for sharper routing
+  temperature: 0.7  # Balanced temperature
   expert_threshold: 0.01
   # Initialization settings
   use_improved_init: true
-  expert_init_strategy: "spectral"
-  gating_init_strategy: "sparse"
+  expert_init_strategy: "mixed"  # Better for diverse experts
+  gating_init_strategy: "uniform"  # Start with uniform routing
 
 # Training Configuration - minimal epochs
 training:
-  batch_size: 16
-  learning_rate: 1e-3
+  batch_size: 128  # Larger batch for stability
+  learning_rate: 3e-4  # Optimal learning rate
   num_epochs: 100  # Very short
   early_stopping_patience: 35
-  gradient_clip_norm: 1.0
+  gradient_clip_norm: 5.0  # Less restrictive clipping
   sequence_length: 50
   optimizer: "adam"
   scheduler:
     type: "cosine"
-    warmup_epochs: 2
-    min_lr: 1e-5
+    warmup_epochs: 10  # Longer warmup
+    min_lr: 1e-6
   regularization:
     route_weight: 0.0        # No routing penalty initially
     expert_weight: 1e-6      # Very light L2 regularization
     diversity_weight: 0.0    # No diversity penalty - let experts specialize
-    smoothness_weight: 1e-5  # Very light smoothness only
+    smoothness_weight: 0.0  # No smoothness penalty
     balance_weight: 0.0      # No balance penalty - natural specialization
 
 # Integration Configuration - fast settings
 integration:
-  method: "rk4"
+  method: "dopri5"
   rtol: 1e-3
   atol: 1e-4
   max_step_size: 0.1
@@ -55,20 +55,20 @@ integration:
   adaptive_step: false  # Fixed step for speed
   routing_aware_step: false
   # Stability control
-  dynamics_max_norm: 50.0  # Maximum norm for dynamics (0 = no limit)
+  dynamics_max_norm: 50.0  # No dynamics bounding for AME-ODE
 
 # Data Configuration - small dataset
 data:
   synthetic_systems:
     - name: "multi_scale_oscillators"
       enabled: true
-      n_trajectories: 1000  # Small dataset
-      trajectory_length: 50
-      sampling_dt: 0.02
+      n_trajectories: 1000  # More data
+      trajectory_length: 100  # Longer trajectories
+      sampling_dt: 0.01  # Finer sampling
       params:
         freq_fast: 10.0
         freq_slow: 0.1
-        coupling_strength: [0.05, 0.05]
+        coupling_strength: [0.1, 0.1]  # Stronger coupling
   noise:
     observation_noise: 0.01
     process_noise: 0.0
