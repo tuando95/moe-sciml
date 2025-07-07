@@ -37,8 +37,15 @@ class SyntheticSystem(ABC):
         n_trajectories: int,
         t_span: torch.Tensor,
         noise_std: float = 0.0,
+        process_noise_std: float = 0.0,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Generate trajectories from the system.
+        
+        Args:
+            n_trajectories: Number of trajectories to generate
+            t_span: Time points
+            noise_std: Observation noise standard deviation
+            process_noise_std: Process noise standard deviation for SDE
         
         Returns:
             Initial conditions and trajectories
@@ -46,15 +53,19 @@ class SyntheticSystem(ABC):
         # Sample initial conditions
         x0 = self.sample_initial_conditions(n_trajectories)
         
-        # Integrate dynamics - odeint is optimized to handle multiple trajectories at once
-        trajectories = odeint(
-            self.dynamics,
-            x0,
-            t_span,
-            method='dopri5',
-            rtol=1e-6,
-            atol=1e-8,
-        )
+        if process_noise_std > 0:
+            # Use Euler-Maruyama for SDE integration with process noise
+            trajectories = self._integrate_sde(x0, t_span, process_noise_std)
+        else:
+            # Use standard ODE integration
+            trajectories = odeint(
+                self.dynamics,
+                x0,
+                t_span,
+                method='dopri5',
+                rtol=1e-6,
+                atol=1e-8,
+            )
         
         # Add observation noise if specified
         if noise_std > 0:
@@ -62,6 +73,43 @@ class SyntheticSystem(ABC):
             trajectories = trajectories + noise
         
         return x0, trajectories
+    
+    def _integrate_sde(
+        self,
+        x0: torch.Tensor,
+        t_span: torch.Tensor,
+        process_noise_std: float,
+    ) -> torch.Tensor:
+        """Integrate SDE using Euler-Maruyama method.
+        
+        dx = f(x,t)dt + σ dW
+        where dW is Brownian motion
+        """
+        n_steps = len(t_span)
+        n_traj = x0.shape[0]
+        state_dim = x0.shape[1]
+        
+        # Initialize trajectory storage
+        trajectories = torch.zeros(n_steps, n_traj, state_dim)
+        trajectories[0] = x0
+        
+        # Euler-Maruyama integration
+        for i in range(1, n_steps):
+            dt = t_span[i] - t_span[i-1]
+            t = t_span[i-1]
+            x = trajectories[i-1]
+            
+            # Deterministic part
+            dx_det = self.dynamics(t, x) * dt
+            
+            # Stochastic part (Brownian motion)
+            dW = torch.randn_like(x) * torch.sqrt(dt)
+            dx_stoch = process_noise_std * dW
+            
+            # Update state
+            trajectories[i] = x + dx_det + dx_stoch
+        
+        return trajectories
     
     def get_ground_truth_expert_assignment(
         self,
@@ -342,8 +390,15 @@ class SyntheticDataGenerator:
     
     def _get_cache_key(self, system_name: str, split: str, system_config: Dict) -> str:
         """Generate a unique cache key based on system configuration."""
+        # Include noise configuration in the cache key
+        cache_config = {
+            'system': system_config,
+            'noise': self.config['data']['noise'],
+            'augmentation': self.config['data'].get('augmentation', {})
+        }
+        
         # Create a deterministic hash of the configuration
-        config_str = json.dumps(system_config, sort_keys=True)
+        config_str = json.dumps(cache_config, sort_keys=True)
         config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
         return f"{system_name}_{split}_{config_hash}"
     
@@ -413,8 +468,16 @@ class SyntheticDataGenerator:
         # Generate trajectories
         print(f"Generating {n_traj} trajectories for {system_name} ({split} split)...")
         noise_std = self.config['data']['noise']['observation_noise']
+        process_noise_std = self.config['data']['noise'].get('process_noise', 0.0)
+        
+        # Show if using SDE integration
+        if process_noise_std > 0:
+            print(f"  Using SDE integration with process noise std={process_noise_std}")
+        
         with tqdm(total=1, desc="  Integrating ODEs", bar_format='{desc}: {bar}') as pbar:
-            x0, trajectories = system.generate_trajectories(n_traj, t_span, noise_std)
+            x0, trajectories = system.generate_trajectories(
+                n_traj, t_span, noise_std, process_noise_std
+            )
             pbar.update(1)
         
         # Compute ground truth expert assignments (vectorized)
