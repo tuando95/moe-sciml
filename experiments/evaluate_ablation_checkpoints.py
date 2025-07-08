@@ -675,7 +675,7 @@ def main():
                         help='Device to use for evaluation')
     parser.add_argument('--output', type=Path, default=Path('ablation_results/checkpoint_evaluation.json'),
                         help='Output file for detailed results')
-    parser.add_argument('--cache-dir', type=Path, default=Path('cache'),
+    parser.add_argument('--cache-dir', type=Path, default=Path('data/cache/synthetic'),
                         help='Cache directory for datasets')
     parser.add_argument('--config', type=Path, default=Path('configs/ablation/base_multiscale.yml'),
                         help='Base configuration file to get data parameters')
