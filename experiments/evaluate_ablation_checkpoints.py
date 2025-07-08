@@ -19,7 +19,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from src.models.ame_ode import AMEODE
 from src.data.synthetic_systems import SyntheticDataGenerator
-from src.evaluation.metrics import compute_trajectory_metrics
+from src.evaluation.metrics import AMEODEMetrics
 from src.utils.config import Config
 from src.evaluation.visualization import AMEODEVisualizer
 
@@ -35,13 +35,25 @@ def create_model_from_checkpoint(checkpoint: Dict[str, Any], device: torch.devic
     config = checkpoint.get('config', {})
     model_config = config.get('model', {})
     
+    # Extract expert architecture
+    expert_arch = model_config.get('expert_architecture', {})
+    expert_hidden_dims = [expert_arch.get('width', 128)] * expert_arch.get('depth', 5)
+    
+    # Extract gating architecture
+    gating_arch = model_config.get('gating_architecture', {})
+    gating_hidden_dims = [gating_arch.get('width', 64)] * gating_arch.get('depth', 3)
+    
+    # Extract history embedding
+    history_config = model_config.get('history_embedding', {})
+    history_dim = history_config.get('hidden_dim', 64)
+    
     # Create model
     model = AMEODE(
         state_dim=checkpoint.get('state_dim', 4),
         n_experts=model_config.get('n_experts', 4),
-        expert_hidden_dims=model_config.get('expert_hidden_dims', [64, 64, 64]),
-        gating_hidden_dims=model_config.get('gating_hidden_dims', [32, 32]),
-        history_dim=model_config.get('history_dim', 32),
+        expert_hidden_dims=expert_hidden_dims,
+        gating_hidden_dims=gating_hidden_dims,
+        history_dim=history_dim,
         temperature=model_config.get('temperature', 1.0),
         expert_threshold=model_config.get('expert_threshold', 0.01),
         device=device
@@ -73,8 +85,16 @@ def evaluate_model(
         pred_trajectories, info = model(x0, times[0])  # Use first time series
     inference_time = time.time() - start_time
     
-    # Compute metrics
-    metrics = compute_trajectory_metrics(pred_trajectories, true_trajectories)
+    # Compute basic trajectory metrics
+    mse = torch.mean((pred_trajectories - true_trajectories) ** 2).item()
+    rmse = torch.sqrt(torch.mean((pred_trajectories - true_trajectories) ** 2)).item()
+    mae = torch.mean(torch.abs(pred_trajectories - true_trajectories)).item()
+    
+    metrics = {
+        'trajectory_mse': mse,
+        'trajectory_rmse': rmse,
+        'trajectory_mae': mae
+    }
     
     # Add additional metrics
     metrics['inference_time'] = inference_time
