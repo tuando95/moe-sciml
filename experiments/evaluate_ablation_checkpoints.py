@@ -18,7 +18,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.models.ame_ode import AMEODE
-from src.data.synthetic_generator import SyntheticDataGenerator
+from src.data.synthetic_systems import SyntheticDataGenerator
 from src.evaluation.metrics import compute_trajectory_metrics
 from src.utils.config import Config
 from src.evaluation.visualization import AMEODEVisualizer
@@ -124,36 +124,25 @@ def load_cached_test_data(
     if system_config is None:
         raise ValueError(f"System {system_name} not found in config")
     
-    # Create data generator with cache
+    # Create data generator with full config structure
     generator_config = {
-        'name': system_name,
-        'cache_dir': str(cache_dir),
-        'params': system_config.get('params', {})
+        'data': {
+            'synthetic_systems': [system_config],
+            'noise': config.data.noise,
+            'train_val_test_split': config.data.get('train_val_test_split', [0.6, 0.2, 0.2]),
+            'augmentation': config.data.get('augmentation', {})
+        },
+        'cache_dir': str(cache_dir)
     }
     
-    data_generator = SyntheticDataGenerator(generator_config)
+    data_generator = SyntheticDataGenerator(generator_config, cache_dir=str(cache_dir))
     
-    # Load full dataset (it will use cache if available)
-    full_data = data_generator.generate_dataset(
-        n_trajectories=system_config.get('n_trajectories', 10000),
-        t_span=(0.0, system_config.get('trajectory_length', 100) * system_config.get('sampling_dt', 0.01)),
-        n_steps=system_config.get('trajectory_length', 100),
-        noise_std=config.data.noise.get('observation_noise', 0.01)
-    )
+    # Generate datasets for each split to get the cached data
+    train_data = data_generator.generate_dataset(system_name, split='train')
+    val_data = data_generator.generate_dataset(system_name, split='val')
+    test_data = data_generator.generate_dataset(system_name, split='test')
     
-    # Split into train/val/test according to config
-    split_ratios = config.data.get('train_val_test_split', [0.6, 0.2, 0.2])
-    n_total = full_data['initial_conditions'].shape[0]
-    n_train = int(n_total * split_ratios[0])
-    n_val = int(n_total * split_ratios[1])
-    
-    # Extract test data
-    test_data = {
-        'initial_conditions': full_data['initial_conditions'][n_train + n_val:],
-        'trajectories': full_data['trajectories'][n_train + n_val:],
-        'times': full_data['times']
-    }
-    
+    # Return test data
     print(f"Loaded test data: {test_data['initial_conditions'].shape[0]} trajectories")
     return test_data
 
