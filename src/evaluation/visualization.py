@@ -302,12 +302,21 @@ class AMEODEVisualizer:
         
         # Ensure dimensions match
         if len(times_np) != len(avg_weights):
-            print(f"Warning: Time points ({len(times_np)}) don't match weight points ({len(avg_weights)})")
-            # Try to fix by interpolating or truncating
-            if len(times_np) > len(avg_weights):
-                times_np = times_np[:len(avg_weights)]
-            else:
-                avg_weights = avg_weights[:len(times_np)]
+            # This is common when routing weights are collected at different intervals
+            # Interpolate weights to match time points for smooth visualization
+            from scipy import interpolate
+            
+            # Create interpolation function
+            weight_times = np.linspace(times_np[0], times_np[-1], len(avg_weights))
+            
+            # Interpolate each expert's weights
+            interpolated_weights = np.zeros((len(times_np), n_experts))
+            for i in range(n_experts):
+                f = interpolate.interp1d(weight_times, avg_weights[:, i], 
+                                       kind='linear', fill_value='extrapolate')
+                interpolated_weights[:, i] = f(times_np)
+            
+            avg_weights = interpolated_weights
         
         # Plot stacked area chart
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
