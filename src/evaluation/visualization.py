@@ -182,10 +182,29 @@ class AMEODEVisualizer:
         
         # Handle different tensor shapes
         # Expected shape: (time, batch, dim) or (batch, time, dim)
-        if true_traj.shape[0] != len(times_np):
-            # Assume shape is (batch, time, dim), need to transpose
-            true_traj = true_traj.transpose(1, 0, 2)
-            pred_traj = pred_traj.transpose(1, 0, 2)
+        # First, check if we have the right number of dimensions
+        if true_traj.ndim == 2:
+            # Shape is (time, dim) - add batch dimension
+            true_traj = true_traj[:, np.newaxis, :]
+            pred_traj = pred_traj[:, np.newaxis, :]
+        elif true_traj.ndim == 3:
+            # Check which dimension matches time
+            if true_traj.shape[1] == len(times_np):
+                # Shape is (batch, time, dim), need to transpose to (time, batch, dim)
+                true_traj = true_traj.transpose(1, 0, 2)
+                pred_traj = pred_traj.transpose(1, 0, 2)
+            elif true_traj.shape[0] != len(times_np):
+                # Neither dimension matches - this is an error
+                print(f"Warning: trajectory shape {true_traj.shape} doesn't match time points {len(times_np)}")
+                # Try to handle gracefully by taking the first trajectory
+                if true_traj.shape[0] > true_traj.shape[1]:
+                    # Likely (time, batch, dim) but time doesn't match
+                    times_np = times_np[:true_traj.shape[0]]
+                else:
+                    # Likely (batch, time, dim)
+                    true_traj = true_traj.transpose(1, 0, 2)
+                    pred_traj = pred_traj.transpose(1, 0, 2)
+                    times_np = times_np[:true_traj.shape[0]]
         
         # Select dimensions to plot
         if dims_to_plot is None:

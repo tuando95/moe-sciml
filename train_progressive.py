@@ -279,18 +279,35 @@ def main():
     with torch.no_grad():
         pred_traj, info = trainer.model(x0, times)
         
+    # Handle different tensor layouts for trajectory comparison
+    # trajectory shape could be (batch, time, dim) or (time, batch, dim)
+    if trajectory.shape[0] == x0.shape[0]:  # batch dimension first
+        # Shape is (batch, time, dim), select first 5 batches
+        traj_to_plot = trajectory[:5]
+        pred_to_plot = pred_traj[:5]
+    else:
+        # Shape is (time, batch, dim), select first 5 batches from dim 1
+        traj_to_plot = trajectory[:, :5]
+        pred_to_plot = pred_traj[:, :5]
+    
     # Plot trajectory comparison
     visualizer.plot_trajectory_comparison(
-        trajectory[:, :5],  # First 5 trajectories
-        pred_traj[:, :5],
+        traj_to_plot,
+        pred_to_plot,
         times,
         save_name='test_trajectories'
     )
     
     # Plot expert usage evolution if available
     if 'routing_weights' in info and info['routing_weights'].numel() > 0:
+        # routing_weights shape: (time, batch, n_experts)
+        if info['routing_weights'].shape[1] == x0.shape[0]:  # batch in dim 1
+            weights_to_plot = info['routing_weights'][:, :5]
+        else:  # batch in dim 0
+            weights_to_plot = info['routing_weights'][:5]
+            
         visualizer.plot_expert_usage_evolution(
-            info['routing_weights'][:, :5],  # First 5 trajectories
+            weights_to_plot,
             times,
             save_name='expert_usage'
         )
