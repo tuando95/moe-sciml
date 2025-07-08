@@ -103,7 +103,13 @@ def evaluate_model(
     # Run inference
     start_time = time.time()
     with torch.no_grad():
-        pred_trajectories, info = model(x0, times[0])  # Use first time series
+        # Ensure times is properly formatted for the model
+        if times.dim() > 1:
+            times_1d = times[0]  # Use first time series
+        else:
+            times_1d = times
+            
+        pred_trajectories, info = model(x0, times_1d)
     inference_time = time.time() - start_time
     
     # Compute basic trajectory metrics
