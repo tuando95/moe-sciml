@@ -136,7 +136,7 @@ def load_cached_test_data(
     
     # Find the system config
     system_config = None
-    for sys_cfg in config.data.synthetic_systems:
+    for sys_cfg in config.data['synthetic_systems']:
         if sys_cfg['name'] == system_name:
             system_config = sys_cfg
             break
@@ -148,7 +148,7 @@ def load_cached_test_data(
     generator_config = {
         'data': {
             'synthetic_systems': [system_config],
-            'noise': config.data.noise,
+            'noise': config.data['noise'],
             'train_val_test_split': config.data.get('train_val_test_split', [0.6, 0.2, 0.2]),
             'augmentation': config.data.get('augmentation', {})
         },
