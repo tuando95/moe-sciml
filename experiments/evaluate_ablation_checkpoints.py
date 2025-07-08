@@ -132,7 +132,7 @@ def load_cached_test_data(
 ) -> Dict[str, torch.Tensor]:
     """Load cached test dataset based on configuration."""
     # Load config to get data parameters
-    config = Config(str(config_path))
+    config = Config(config_path)
     
     # Find the system config
     system_config = None
