@@ -32,32 +32,53 @@ def load_checkpoint(checkpoint_path: Path, device: torch.device) -> Dict[str, An
 
 def create_model_from_checkpoint(checkpoint: Dict[str, Any], device: torch.device) -> AMEODE:
     """Create and load model from checkpoint."""
+    # Get the full config from checkpoint
     config = checkpoint.get('config', {})
-    model_config = config.get('model', {})
     
-    # Extract expert architecture
-    expert_arch = model_config.get('expert_architecture', {})
-    expert_hidden_dims = [expert_arch.get('width', 128)] * expert_arch.get('depth', 5)
+    # Ensure the config has the required structure
+    if 'model' not in config:
+        # Create a minimal config if missing
+        config = {
+            'model': {
+                'state_dim': checkpoint.get('state_dim', 4),
+                'n_experts': 4,
+                'expert_architecture': {
+                    'depth': 5,
+                    'width': 128,
+                    'activation': 'tanh',
+                    'residual': True
+                },
+                'gating_architecture': {
+                    'depth': 3,
+                    'width': 64,
+                    'activation': 'relu'
+                },
+                'history_embedding': {
+                    'type': 'lstm',
+                    'hidden_dim': 64,
+                    'num_layers': 1
+                },
+                'temperature': 1.0,
+                'expert_threshold': 0.01
+            },
+            'integration': {
+                'method': 'dopri5',
+                'rtol': 1e-3,
+                'atol': 1e-4,
+                'max_step_size': 0.1,
+                'min_step_size': 1e-4,
+                'adaptive_step': False,
+                'routing_aware_step': False,
+                'adjoint': True
+            }
+        }
     
-    # Extract gating architecture
-    gating_arch = model_config.get('gating_architecture', {})
-    gating_hidden_dims = [gating_arch.get('width', 64)] * gating_arch.get('depth', 3)
+    # Update state_dim from checkpoint if available
+    if 'state_dim' in checkpoint:
+        config['model']['state_dim'] = checkpoint['state_dim']
     
-    # Extract history embedding
-    history_config = model_config.get('history_embedding', {})
-    history_dim = history_config.get('hidden_dim', 64)
-    
-    # Create model
-    model = AMEODE(
-        state_dim=checkpoint.get('state_dim', 4),
-        n_experts=model_config.get('n_experts', 4),
-        expert_hidden_dims=expert_hidden_dims,
-        gating_hidden_dims=gating_hidden_dims,
-        history_dim=history_dim,
-        temperature=model_config.get('temperature', 1.0),
-        expert_threshold=model_config.get('expert_threshold', 0.01),
-        device=device
-    )
+    # Create model with full config
+    model = AMEODE(config).to(device)
     
     # Load state dict
     model.load_state_dict(checkpoint['model_state_dict'])
