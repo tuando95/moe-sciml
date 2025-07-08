@@ -417,10 +417,27 @@ def main():
                         help='Number of GPUs to use for parallel execution')
     parser.add_argument('--compare', action='store_true',
                         help='Compare results across categories')
+    parser.add_argument('--evaluate-checkpoints', action='store_true',
+                        help='Evaluate trained models from checkpoints instead of training')
+    parser.add_argument('--checkpoint-dir', type=Path, default=Path('checkpoints_ablation'),
+                        help='Directory containing model checkpoints')
+    parser.add_argument('--baseline-checkpoint', type=Path, default=Path('checkpoints_test/best_model.pt'),
+                        help='Path to baseline model checkpoint')
     
     args = parser.parse_args()
     
-    if args.compare:
+    if args.evaluate_checkpoints:
+        # Evaluate checkpoints instead of running training
+        import subprocess
+        cmd = [
+            'python', 'experiments/evaluate_ablation_checkpoints.py',
+            '--checkpoint-dir', str(args.checkpoint_dir),
+            '--baseline-checkpoint', str(args.baseline_checkpoint),
+            '--output', str(args.output_dir / 'checkpoint_evaluation.json')
+        ]
+        print(f"Running checkpoint evaluation: {' '.join(cmd)}")
+        subprocess.run(cmd)
+    elif args.compare:
         # Just compare existing results
         compare_ablation_categories(args.output_dir)
     else:
