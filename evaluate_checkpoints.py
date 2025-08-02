@@ -305,7 +305,7 @@ def main():
             
         # Create 4-panel figure for AME-ODE if requested
         if args.create_figure and args.system == 'multi_scale_oscillators':
-            ame_checkpoint = Path(args.checkpoint_dir) / 'best_ame_ode.pt'
+            ame_checkpoint = Path(args.checkpoint_dir) / 'best_model.pt'
             if ame_checkpoint.exists():
                 print("\nGenerating 4-panel figure for AME-ODE...")
                 create_4panel_figure(
